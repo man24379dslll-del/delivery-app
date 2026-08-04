@@ -1,0 +1,824 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Аналитика доставки ТК</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@500;700&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<style>
+:root{--bg:#F7F8FA;--card:#fff;--ink:#111827;--soft:#6B7280;--border:#E5E7EB;
+  --blue:#2563EB;--blue-l:#EFF6FF;--green:#059669;--green-l:#ECFDF5;
+  --red:#DC2626;--red-l:#FEF2F2;--orange:#D97706;--orange-l:#FFFBEB}
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:'Inter',sans-serif;background:var(--bg);color:var(--ink);font-size:14px}
+
+/* header */
+.hdr{background:var(--ink);color:#fff;height:52px;padding:0 24px;display:flex;align-items:center;gap:12px;position:sticky;top:0;z-index:100}
+.hdr h1{font-size:15px;font-weight:700}.hdr .sep{color:#374151}
+.hdr .sub{font-size:12px;color:#9CA3AF}
+.hdr-r{margin-left:auto;display:flex;gap:10px}
+.btn-sm{font-size:12px;padding:5px 12px;border-radius:6px;cursor:pointer;border:1px solid #374151;background:none;color:#D1D5DB}
+.btn-sm:hover{border-color:#9CA3AF}
+
+/* upload */
+.upzone{border:2px dashed var(--border);border-radius:14px;padding:44px 32px;text-align:center;background:var(--card);cursor:pointer;transition:.2s;max-width:560px;margin:32px auto}
+.upzone.drag{border-color:var(--blue);background:var(--blue-l)}
+.upzone h2{font-size:16px;font-weight:600;margin-bottom:8px}.upzone p{color:var(--soft);font-size:13px}
+.upbtn{display:inline-block;margin-top:16px;background:var(--blue);color:#fff;padding:10px 22px;border-radius:8px;font-weight:600;font-size:13px;cursor:pointer;border:none}
+#file-input{display:none}.ustatus{margin-top:10px;font-size:13px;color:var(--soft)}
+
+/* layout */
+.wrap{max-width:1320px;margin:0 auto;padding:0 20px 80px}
+.stitle{font-size:17px;font-weight:700;margin:28px 0 14px;letter-spacing:-.01em}
+.stitle small{font-size:12px;font-weight:400;color:var(--soft);margin-left:8px}
+
+/* tabs */
+.tabs{display:flex;gap:4px;border-bottom:1px solid var(--border);margin-bottom:20px}
+.tab{padding:8px 18px;font-size:13px;font-weight:500;cursor:pointer;border-bottom:2px solid transparent;color:var(--soft)}
+.tab.active{color:var(--blue);border-bottom-color:var(--blue)}
+
+/* kpi */
+.kpi-row{display:grid;grid-template-columns:repeat(auto-fill,minmax(170px,1fr));gap:12px}
+.kpi{background:var(--card);border:1px solid var(--border);border-radius:10px;padding:16px 18px}
+.kpi-l{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--soft);margin-bottom:4px}
+.kpi-v{font-family:'JetBrains Mono',monospace;font-size:26px;font-weight:700}
+.kpi-s{font-size:11px;color:var(--soft);margin-top:3px}
+.c-green .kpi-v{color:var(--green)}.c-red .kpi-v{color:var(--red)}.c-blue .kpi-v{color:var(--blue)}
+
+/* table */
+.tbl-wrap{background:var(--card);border:1px solid var(--border);border-radius:10px;overflow:hidden}
+table{width:100%;border-collapse:collapse}
+th{background:#F9FAFB;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.04em;color:var(--soft);padding:9px 13px;text-align:left;border-bottom:1px solid var(--border);white-space:nowrap;cursor:pointer;user-select:none}
+th:hover{background:#F0F2F5}
+th.sort-asc::after{content:" ↑"}th.sort-desc::after{content:" ↓"}
+td{padding:9px 13px;border-bottom:1px solid var(--border);font-size:12.5px}
+tr:last-child td{border-bottom:none}tr:hover td{background:#FAFAFA}
+
+/* badge */
+.badge{display:inline-block;padding:1px 7px;border-radius:10px;font-size:11px;font-weight:600}
+.bg{background:var(--green-l);color:var(--green)}
+.br{background:var(--red-l);color:var(--red)}
+.bb{background:var(--blue-l);color:var(--blue)}
+.bo{background:var(--orange-l);color:var(--orange)}
+
+/* rate bar */
+.rb{display:flex;align-items:center;gap:7px}
+.rb-t{flex:1;height:5px;background:var(--border);border-radius:3px;overflow:hidden}
+.rb-f{height:100%;border-radius:3px}
+.rb-v{font-family:'JetBrains Mono',monospace;font-size:11px;font-weight:700;width:38px}
+
+/* charts */
+.ch-grid{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+.ch-card{background:var(--card);border:1px solid var(--border);border-radius:10px;padding:20px}
+.ch-card h3{font-size:13px;font-weight:600;margin-bottom:14px}
+.ch-wrap{position:relative;height:260px}
+@media(max-width:768px){.ch-grid{grid-template-columns:1fr}}
+
+/* matrix */
+.mat-wrap{background:var(--card);border:1px solid var(--border);border-radius:10px;overflow-x:auto}
+.mat-wrap table th{min-width:100px}
+.heat{font-size:11px;font-weight:700;font-family:'JetBrains Mono',monospace;border-radius:5px;padding:3px 7px;display:inline-block;min-width:46px;text-align:center}
+
+/* filters */
+.filters{display:flex;gap:10px;margin-bottom:14px;flex-wrap:wrap}
+.filters input,.filters select{
+  padding:7px 12px;border:1px solid var(--border);border-radius:7px;font-size:12.5px;
+  background:var(--card);color:var(--ink);outline:none}
+.filters input:focus,.filters select:focus{border-color:var(--blue)}
+.filters input{min-width:220px}
+
+/* loader */
+.loader{display:none;text-align:center;padding:48px;color:var(--soft)}
+.spin{width:30px;height:30px;border:3px solid var(--border);border-top-color:var(--blue);border-radius:50%;animation:sp .8s linear infinite;margin:0 auto 10px}
+@keyframes sp{to{transform:rotate(360deg)}}
+
+#dash{display:none}
+.tab-content{display:none}.tab-content.active{display:block}
+</style>
+</head>
+<body>
+
+<div class="hdr">
+  <h1>📦 Аналитика доставки</h1>
+  <span class="sep">|</span>
+  <span class="sub" id="hdr-file">загрузите файл Excel</span>
+  <div class="hdr-r">
+    <button class="btn-sm" onclick="toggleHist()">История</button>
+  </div>
+</div>
+
+<div class="wrap">
+
+<div id="upload-sec">
+  <div class="upzone" id="dropzone">
+    <h2>Загрузите Excel-файл с данными доставки</h2>
+    <p>Листы «Чеки ЗДР 26», «Чеки увел 26» · форматы .xlsx / .xls</p>
+    <label class="upbtn" for="file-input">Выбрать файл</label>
+    <input type="file" id="file-input" accept=".xlsx,.xls">
+    <div class="ustatus" id="ustatus"></div>
+  </div>
+</div>
+
+<div class="loader" id="loader"><div class="spin"></div>Обрабатываем файл...</div>
+
+<div id="dash">
+
+  <!-- KPI -->
+  <div class="stitle">Общая сводка</div>
+  <div class="kpi-row" id="kpi-row"></div>
+
+  <!-- TABS -->
+  <div style="margin-top:28px">
+    <div class="tabs">
+      <div class="tab active" onclick="showTab('tk')">По ТК</div>
+      <div class="tab" onclick="showTab('seg')">По размеру города</div>
+      <div class="tab" onclick="showTab('city')">По городам</div>
+      <div class="tab" onclick="showTab('region')">По регионам</div>
+      <div class="tab" onclick="showTab('abc')">ABC/XYZ анализ</div>
+      <div class="tab" onclick="showTab('months')">По месяцам</div>
+      <div class="tab" onclick="showTab('matrix')">Матрица ТК × Сегмент</div>
+      <div class="tab" onclick="showTab('charts')">Графики</div>
+    </div>
+
+    <!-- ТК -->
+    <div class="tab-content active" id="tab-tk">
+      <div class="tbl-wrap">
+        <table id="tk-tbl">
+          <thead><tr>
+            <th onclick="sortTbl('tk-tbl',0)">Транспортная компания</th>
+            <th onclick="sortTbl('tk-tbl',1)">Заказов</th>
+            <th onclick="sortTbl('tk-tbl',2)">Доля</th>
+            <th onclick="sortTbl('tk-tbl',3)">% выкупа</th>
+            <th onclick="sortTbl('tk-tbl',4)">% возврата</th>
+            <th onclick="sortTbl('tk-tbl',5)">Срок (полный), дн.</th>
+            <th onclick="sortTbl('tk-tbl',6)">Срок в пути, дн.</th>
+            <th onclick="sortTbl('tk-tbl',7)">Ожидание ПВЗ, дн.</th>
+            <th onclick="sortTbl('tk-tbl',8)">Ср. чек, ₽</th>
+          </tr></thead>
+          <tbody id="tk-body"></tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- СЕГМЕНТЫ -->
+    <div class="tab-content" id="tab-seg">
+      <div class="tbl-wrap">
+        <table id="seg-tbl">
+          <thead><tr>
+            <th>Сегмент города</th>
+            <th onclick="sortTbl('seg-tbl',1)">Заказов</th>
+            <th onclick="sortTbl('seg-tbl',2)">Доля</th>
+            <th onclick="sortTbl('seg-tbl',3)">% выкупа</th>
+            <th onclick="sortTbl('seg-tbl',4)">% возврата</th>
+            <th onclick="sortTbl('seg-tbl',5)">Срок полный, дн.</th>
+            <th onclick="sortTbl('seg-tbl',6)">Медиана срока</th>
+            <th onclick="sortTbl('seg-tbl',7)">В пути, дн.</th>
+            <th onclick="sortTbl('seg-tbl',8)">Ожидание ПВЗ, дн.</th>
+            <th onclick="sortTbl('seg-tbl',9)">Ср. чек, ₽</th>
+          </tr></thead>
+          <tbody id="seg-body"></tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- ГОРОДА -->
+    <div class="tab-content" id="tab-city">
+      <div class="filters">
+        <input type="text" id="city-search" placeholder="🔍 Поиск по городу..." oninput="filterCities()">
+        <select id="city-region-filter" onchange="filterCities()">
+          <option value="">Все регионы</option>
+        </select>
+        <select id="city-seg-filter" onchange="filterCities()">
+          <option value="">Все сегменты</option>
+          <option>до 20 тыс.</option>
+          <option>20–50 тыс.</option>
+          <option>50–100 тыс.</option>
+          <option>100 тыс.+</option>
+        </select>
+        <select id="city-sort" onchange="filterCities()">
+          <option value="total">Сортировка: по объёму</option>
+          <option value="delivery_rate">по % выкупа</option>
+          <option value="срок_полный_ср">по сроку доставки</option>
+          <option value="avg_check">по ср. чеку</option>
+        </select>
+      </div>
+      <div class="tbl-wrap">
+        <table>
+          <thead><tr>
+            <th>Город</th>
+            <th>Регион</th>
+            <th>Сегмент</th>
+            <th>Заказов</th>
+            <th>% выкупа</th>
+            <th>% возврата</th>
+            <th>Срок полный, дн.</th>
+            <th>Медиана, дн.</th>
+            <th>В пути, дн.</th>
+            <th>Ожидание ПВЗ, дн.</th>
+            <th>Ср. чек, ₽</th>
+            <th>Выручка, ₽</th>
+          </tr></thead>
+          <tbody id="city-body"></tbody>
+        </table>
+      </div>
+      <div style="font-size:12px;color:var(--soft);margin-top:8px" id="city-count"></div>
+    </div>
+
+    <!-- РЕГИОНЫ -->
+    <div class="tab-content" id="tab-region">
+      <div class="tbl-wrap">
+        <table id="reg-tbl">
+          <thead><tr>
+            <th onclick="sortTbl('reg-tbl',0)">Регион</th>
+            <th onclick="sortTbl('reg-tbl',1)">Заказов</th>
+            <th onclick="sortTbl('reg-tbl',2)">Доля</th>
+            <th onclick="sortTbl('reg-tbl',3)">% выкупа</th>
+            <th onclick="sortTbl('reg-tbl',4)">% возврата</th>
+            <th onclick="sortTbl('reg-tbl',5)">Срок полный, дн.</th>
+            <th onclick="sortTbl('reg-tbl',6)">В пути, дн.</th>
+            <th onclick="sortTbl('reg-tbl',7)">Ожидание ПВЗ, дн.</th>
+            <th onclick="sortTbl('reg-tbl',8)">Ср. чек, ₽</th>
+          </tr></thead>
+          <tbody id="reg-body"></tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- ABC/XYZ -->
+    <div class="tab-content" id="tab-abc">
+      <p style="font-size:12px;color:var(--soft);margin-bottom:14px">
+        Рекомендация лучшей ТК по каждому региону — на основе <strong>скорости доставки</strong> и <strong>% выкупа</strong>.
+        A = лучший результат, B = средний, C = низкий. XYZ — стабильность: X = стабильно, Y = умеренно, Z = нестабильно.
+      </p>
+      <div class="filters">
+        <select id="abc-sort" onchange="renderABC()">
+          <option value="score">Сортировка: по итоговому баллу</option>
+          <option value="delivery_rate">по % выкупа</option>
+          <option value="срок_полный_ср">по сроку доставки</option>
+          <option value="total">по объёму заказов</option>
+        </select>
+      </div>
+      <div class="tbl-wrap">
+        <table>
+          <thead><tr>
+            <th>Регион</th>
+            <th>Рек. ТК</th>
+            <th>Класс</th>
+            <th>% выкупа</th>
+            <th>Срок, дн.</th>
+            <th>Объём</th>
+            <th>Балл (100)</th>
+            <th>Почта</th>
+            <th>СДЭК</th>
+            <th>5Post</th>
+          </tr></thead>
+          <tbody id="abc-body"></tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- ПО МЕСЯЦАМ -->
+    <div class="tab-content" id="tab-months">
+      <div class="filters">
+        <select id="month-tk" onchange="renderMonths()">
+          <option value="">Все ТК</option>
+          <option>5Post</option>
+          <option>СДЭК</option>
+          <option>Почта России</option>
+          <option>Курьер (стационар)</option>
+          <option>Курьер (свой)</option>
+        </select>
+        <select id="month-metric" onchange="renderMonths()">
+          <option value="delivery_rate">Метрика: % выкупа</option>
+          <option value="total">Объём заказов</option>
+          <option value="срок_полный_ср">Срок доставки</option>
+          <option value="avg_check">Средний чек</option>
+        </select>
+      </div>
+      <div class="tbl-wrap" style="margin-bottom:20px">
+        <table>
+          <thead><tr>
+            <th>Месяц</th>
+            <th>Заказов</th>
+            <th>Доставлено</th>
+            <th>% выкупа</th>
+            <th>% возврата</th>
+            <th>Срок полный, дн.</th>
+            <th>Медиана, дн.</th>
+            <th>Ср. чек, ₽</th>
+          </tr></thead>
+          <tbody id="months-body"></tbody>
+        </table>
+      </div>
+      <div class="ch-card">
+        <h3 id="months-chart-title">Динамика по месяцам</h3>
+        <div class="ch-wrap"><canvas id="ch-months"></canvas></div>
+      </div>
+    </div>
+
+    <!-- МАТРИЦА -->
+    <div class="tab-content" id="tab-matrix">
+      <p style="font-size:12px;color:var(--soft);margin-bottom:12px">
+        Тепловая карта % выкупа: ТК × размер города. Зелёный = выше выкуп, красный = ниже.
+        В скобках — средний срок доставки (дней).
+      </p>
+      <div class="mat-wrap"><table id="mat-tbl"></table></div>
+    </div>
+
+    <!-- ГРАФИКИ -->
+    <div class="tab-content" id="tab-charts">
+      <div class="ch-grid">
+        <div class="ch-card">
+          <h3>% выкупа по ТК</h3>
+          <div class="ch-wrap"><canvas id="ch-tk-rate"></canvas></div>
+        </div>
+        <div class="ch-card">
+          <h3>Срок доставки по ТК (дней, среднее)</h3>
+          <div class="ch-wrap"><canvas id="ch-tk-days"></canvas></div>
+        </div>
+        <div class="ch-card">
+          <h3>% выкупа по размеру города</h3>
+          <div class="ch-wrap"><canvas id="ch-seg-rate"></canvas></div>
+        </div>
+        <div class="ch-card">
+          <h3>Динамика заказов и % выкупа по месяцам</h3>
+          <div class="ch-wrap"><canvas id="ch-trend"></canvas></div>
+        </div>
+        <div class="ch-card">
+          <h3>Объём заказов по ТК</h3>
+          <div class="ch-wrap"><canvas id="ch-tk-vol"></canvas></div>
+        </div>
+        <div class="ch-card">
+          <h3>Срок по сегменту города (дней, среднее)</h3>
+          <div class="ch-wrap"><canvas id="ch-seg-days"></canvas></div>
+        </div>
+      </div>
+    </div>
+
+  </div><!-- /tabs-content -->
+</div><!-- /dash -->
+</div><!-- /wrap -->
+
+<script>
+const COLORS = ['#2563EB','#059669','#D97706','#7C3AED','#DC2626','#0891B2','#65A30D'];
+let CITY_DATA = [];
+let charts = {};
+
+// ── Upload ──────────────────────────────────────────────────────────
+const dz = document.getElementById('dropzone');
+const fi = document.getElementById('file-input');
+fi.addEventListener('change', e => go(e.target.files[0]));
+dz.addEventListener('dragover', e=>{e.preventDefault();dz.classList.add('drag')});
+dz.addEventListener('dragleave', ()=>dz.classList.remove('drag'));
+dz.addEventListener('drop', e=>{e.preventDefault();dz.classList.remove('drag');go(e.dataTransfer.files[0])});
+
+async function go(file){
+  if(!file) return;
+  document.getElementById('ustatus').textContent = `Загружаем ${file.name}...`;
+  document.getElementById('loader').style.display='block';
+  document.getElementById('dash').style.display='none';
+  const fd=new FormData(); fd.append('file',file);
+  try{
+    const r = await fetch('/api/upload',{method:'POST',body:fd});
+    const j = await r.json();
+    if(!r.ok) throw new Error(j.detail||'Ошибка');
+    render(j.analytics, j.filename, j.rows);
+  }catch(e){
+    document.getElementById('ustatus').textContent='❌ '+e.message;
+  }finally{
+    document.getElementById('loader').style.display='none';
+  }
+}
+
+// ── Tabs ────────────────────────────────────────────────────────────
+function showTab(id){
+  document.querySelectorAll('.tab').forEach((t,i)=>{
+    const ids=['tk','seg','city','region','abc','months','matrix','charts'];
+    t.classList.toggle('active', ids[i]===id);
+  });
+  document.querySelectorAll('.tab-content').forEach(c=>c.classList.remove('active'));
+  document.getElementById('tab-'+id).classList.add('active');
+  if(id==='abc') renderABC();
+  if(id==='months') renderMonths();
+}
+
+// ── Helpers ─────────────────────────────────────────────────────────
+const fmt  = n => (n||0).toLocaleString('ru');
+const fmtD = v => v!=null ? v.toFixed(1) : '—';
+
+function rbar(v){
+  if(v==null) return '—';
+  const c = v>=50?'#059669':v>=40?'#D97706':'#DC2626';
+  return `<div class="rb">
+    <div class="rb-t"><div class="rb-f" style="width:${v}%;background:${c}"></div></div>
+    <div class="rb-v" style="color:${c}">${v}%</div></div>`;
+}
+function badgeR(v){
+  if(v==null) return '—';
+  const cls = v>35?'br':v>25?'bo':'bg';
+  return `<span class="badge ${cls}">${v}%</span>`;
+}
+function segBadge(s){
+  const m={'до 20 тыс.':'bo','20–50 тыс.':'bb','50–100 тыс.':'bg','100 тыс.+':'bb'};
+  return `<span class="badge ${m[s]||'bb'}">${s}</span>`;
+}
+
+// ── Render ──────────────────────────────────────────────────────────
+function render(data, filename, rows){
+  document.getElementById('hdr-file').textContent = `${filename} · ${rows.toLocaleString('ru')} строк`;
+
+  // KPI
+  const s = data.summary;
+  document.getElementById('kpi-row').innerHTML = [
+    {l:'Всего заказов',  v:fmt(s.total),     sub:'в файле',           cls:'c-blue'},
+    {l:'Доставлено',     v:fmt(s.delivered), sub:s.delivery_rate+'%', cls:'c-green'},
+    {l:'Возвраты',       v:fmt(s.returned),  sub:s.return_rate+'%',   cls:'c-red'},
+    {l:'% выкупа',       v:s.delivery_rate+'%', sub:'доставленных',   cls:'c-green'},
+    {l:'Ср. срок (все)', v:fmtD(s.срок_полный_ср)+'дн', sub:'медиана '+fmtD(s.срок_полный_медиана)+'дн', cls:''},
+    {l:'Срок в пути',    v:fmtD(s.срок_в_пути_ср)+'дн',  sub:'среднее',  cls:''},
+    {l:'Ожидание ПВЗ',   v:fmtD(s.срок_ожидания_ср)+'дн',sub:'среднее',  cls:''},
+    {l:'Ср. чек',        v:fmt(s.avg_check)+'₽', sub:'доставленных',  cls:''},
+  ].map(k=>`<div class="kpi ${k.cls}">
+    <div class="kpi-l">${k.l}</div>
+    <div class="kpi-v">${k.v}</div>
+    <div class="kpi-s">${k.sub}</div></div>`).join('');
+
+  // ТК
+  document.getElementById('tk-body').innerHTML = data.by_tk.map(r=>`<tr>
+    <td><strong>${r.tk}</strong></td>
+    <td class="mono">${fmt(r.total)}</td>
+    <td><span class="badge bb">${r.share_pct}%</span></td>
+    <td>${rbar(r.delivery_rate)}</td>
+    <td>${badgeR(r.return_rate)}</td>
+    <td class="mono">${fmtD(r.срок_полный_ср)}</td>
+    <td class="mono">${fmtD(r.срок_в_пути_ср)}</td>
+    <td class="mono">${fmtD(r.срок_ожидания_ср)}</td>
+    <td class="mono">${fmt(r.avg_check)}</td></tr>`).join('');
+
+  // Сегменты
+  document.getElementById('seg-body').innerHTML = data.by_segment.map(r=>`<tr>
+    <td><strong>${r.segment}</strong></td>
+    <td class="mono">${fmt(r.total)}</td>
+    <td><span class="badge bb">${r.share_pct}%</span></td>
+    <td>${rbar(r.delivery_rate)}</td>
+    <td>${badgeR(r.return_rate)}</td>
+    <td class="mono">${fmtD(r.срок_полный_ср)}</td>
+    <td class="mono">${fmtD(r.срок_полный_медиана)}</td>
+    <td class="mono">${fmtD(r.срок_в_пути_ср)}</td>
+    <td class="mono">${fmtD(r.срок_ожидания_ср)}</td>
+    <td class="mono">${fmt(r.avg_check)}</td></tr>`).join('');
+
+  // Города — заполняем фильтр регионов
+  CITY_DATA = data.by_city;
+  const regionSel = document.getElementById('city-region-filter');
+  const regions = [...new Set(data.by_city.map(r=>r.region))].sort((a,b)=>a.localeCompare(b,'ru'));
+  regionSel.innerHTML = '<option value="">Все регионы</option>' +
+    regions.map(r=>`<option>${r}</option>`).join('');
+  filterCities();
+
+  // Регионы
+  document.getElementById('reg-body').innerHTML = data.by_region.map(r=>`<tr>
+    <td>${r.region}</td>
+    <td class="mono">${fmt(r.total)}</td>
+    <td><span class="badge bb">${r.share_pct}%</span></td>
+    <td>${rbar(r.delivery_rate)}</td>
+    <td>${badgeR(r.return_rate)}</td>
+    <td class="mono">${fmtD(r.срок_полный_ср)}</td>
+    <td class="mono">${fmtD(r.срок_в_пути_ср)}</td>
+    <td class="mono">${fmtD(r.срок_ожидания_ср)}</td>
+    <td class="mono">${fmt(r.avg_check)}</td></tr>`).join('');
+
+  // ABC/XYZ
+  buildABC(data);
+
+  // Месяцы
+  MONTHS_DATA = data.trend || [];
+
+  // Матрица
+  renderMatrix(data.tk_by_segment, data.segments_order);
+
+  // Графики
+  renderCharts(data);
+
+  document.getElementById('dash').style.display='block';
+  document.getElementById('upload-sec').style.display='none';
+}
+
+// ── Города фильтр/поиск ─────────────────────────────────────────────
+function filterCities(){
+  const q   = document.getElementById('city-search').value.toLowerCase();
+  const seg = document.getElementById('city-seg-filter').value;
+  const reg = document.getElementById('city-region-filter').value;
+  const srt = document.getElementById('city-sort').value;
+
+  let rows = CITY_DATA.filter(r=>{
+    const ok_q = !q || r.city.toLowerCase().includes(q);
+    const ok_s = !seg || r.segment === seg;
+    const ok_r = !reg || r.region === reg;
+    return ok_q && ok_s && ok_r;
+  });
+
+  rows.sort((a,b)=>{
+    const av = a[srt]??-1, bv = b[srt]??-1;
+    return srt==='срок_полный_ср' ? av-bv : bv-av;
+  });
+
+  document.getElementById('city-body').innerHTML = rows.map(r=>`<tr>
+    <td><strong>${r.city}</strong></td>
+    <td style="color:var(--soft);font-size:12px">${r.region}</td>
+    <td>${segBadge(r.segment)}</td>
+    <td class="mono">${fmt(r.total)}</td>
+    <td>${rbar(r.delivery_rate)}</td>
+    <td>${badgeR(r.return_rate)}</td>
+    <td class="mono">${fmtD(r.срок_полный_ср)}</td>
+    <td class="mono">${fmtD(r.срок_полный_медиана)}</td>
+    <td class="mono">${fmtD(r.срок_в_пути_ср)}</td>
+    <td class="mono">${fmtD(r.срок_ожидания_ср)}</td>
+    <td class="mono">${fmt(r.avg_check)}</td>
+    <td class="mono">${fmt(r.revenue)}</td></tr>`).join('');
+  document.getElementById('city-count').textContent = `Показано: ${rows.length} городов`;
+}
+
+// ── Матрица ─────────────────────────────────────────────────────────
+function renderMatrix(tkData, segs){
+  const heat = v => {
+    if(v==null) return '#F3F4F6';
+    const g = Math.round(120 + v*1.2);
+    return `rgb(${Math.round(240-v*1.8)},${Math.min(g,220)},${Math.round(130-v)})`;
+  };
+  const fc = v => v==null?'#9CA3AF':v>48?'#fff':'#111';
+
+  let h = '<thead><tr><th>ТК / Город</th>';
+  segs.forEach(s=>h+=`<th>${s}</th>`);
+  h += '</tr></thead><tbody>';
+
+  Object.entries(tkData).forEach(([tk,rows])=>{
+    h += `<tr><td><strong>${tk}</strong></td>`;
+    rows.forEach(seg=>{
+      const v = seg.delivery_rate, d = seg.срок_полный_ср;
+      h += `<td style="text-align:center">
+        <span class="heat" style="background:${heat(v)};color:${fc(v)}">
+          ${v!=null?v+'%':'—'}
+        </span>
+        ${v!=null?`<div style="font-size:10px;color:#9CA3AF;margin-top:2px">
+          ${d!=null?d+'дн':'—'} · ${fmt(seg.total)}зак</div>`:''}
+      </td>`;
+    });
+    h += '</tr>';
+  });
+  h += '</tbody>';
+  document.getElementById('mat-tbl').innerHTML = h;
+}
+
+// ── Графики ─────────────────────────────────────────────────────────
+function renderCharts(data){
+  Object.values(charts).forEach(c=>c.destroy()); charts={};
+
+  const mkBar = (id, labels, datasets, opts={}) => {
+    charts[id] = new Chart(document.getElementById(id),{
+      type:'bar',
+      data:{labels, datasets},
+      options:{plugins:{legend:{display:false}},...opts}
+    });
+  };
+
+  // % выкупа по ТК
+  const tkN = data.by_tk.map(r=>r.tk);
+  const tkR = data.by_tk.map(r=>r.delivery_rate||0);
+  mkBar('ch-tk-rate', tkN, [{label:'% выкупа',data:tkR,backgroundColor:COLORS,borderRadius:5}],
+    {scales:{y:{beginAtZero:true,max:100,ticks:{callback:v=>v+'%'}}}});
+
+  // Срок по ТК
+  const tkD = data.by_tk.map(r=>r.срок_полный_ср);
+  mkBar('ch-tk-days', tkN, [{label:'дней',data:tkD,backgroundColor:COLORS.map(c=>c+'99'),borderRadius:5}],
+    {scales:{y:{beginAtZero:true,ticks:{callback:v=>v+'д'}}}});
+
+  // % выкупа по сегменту
+  const sgN = data.by_segment.map(r=>r.segment);
+  const sgR = data.by_segment.map(r=>r.delivery_rate||0);
+  mkBar('ch-seg-rate', sgN, [{label:'% выкупа',data:sgR,
+    backgroundColor:['#0EA5E9','#3B82F6','#6366F1','#8B5CF6'],borderRadius:5}],
+    {scales:{y:{beginAtZero:true,max:100,ticks:{callback:v=>v+'%'}}}});
+
+  // Срок по сегменту
+  const sgD = data.by_segment.map(r=>r.срок_полный_ср);
+  mkBar('ch-seg-days', sgN, [{label:'дней',data:sgD,
+    backgroundColor:['#0EA5E960','#3B82F660','#6366F160','#8B5CF660'],borderRadius:5}],
+    {scales:{y:{beginAtZero:true,ticks:{callback:v=>v+'д'}}}});
+
+  // Объём по ТК (donut)
+  charts['ch-tk-vol'] = new Chart(document.getElementById('ch-tk-vol'),{
+    type:'doughnut',
+    data:{labels:tkN, datasets:[{data:data.by_tk.map(r=>r.total),
+      backgroundColor:COLORS,borderWidth:2,borderColor:'#fff'}]},
+    options:{plugins:{legend:{position:'right'}},cutout:'60%'}
+  });
+
+  // Тренд
+  if(data.trend?.length){
+    const months = data.trend.map(r=>r.month);
+    charts['ch-trend'] = new Chart(document.getElementById('ch-trend'),{
+      type:'line',
+      data:{labels:months,datasets:[
+        {label:'Заказов',data:data.trend.map(r=>r.total),yAxisID:'y1',
+          borderColor:'#2563EB',backgroundColor:'rgba(37,99,235,.1)',fill:true,tension:.3},
+        {label:'% выкупа',data:data.trend.map(r=>r.delivery_rate),yAxisID:'y2',
+          borderColor:'#059669',borderDash:[4,3],tension:.3}
+      ]},
+      options:{scales:{
+        y1:{position:'left',beginAtZero:true},
+        y2:{position:'right',beginAtZero:true,max:100,
+          ticks:{callback:v=>v+'%'},grid:{drawOnChartArea:false}}
+      }}
+    });
+  }
+}
+
+// ── Сортировка таблиц ───────────────────────────────────────────────
+const sortDir = {};
+function sortTbl(tblId, col){
+  const tbl = document.getElementById(tblId);
+  const th  = tbl.querySelectorAll('th')[col];
+  const dir = (sortDir[tblId+'_'+col] = !(sortDir[tblId+'_'+col]));
+  tbl.querySelectorAll('th').forEach(t=>t.classList.remove('sort-asc','sort-desc'));
+  th.classList.add(dir?'sort-asc':'sort-desc');
+  const rows = Array.from(tbl.tBodies[0].rows);
+  rows.sort((a,b)=>{
+    const av=a.cells[col].textContent.replace(/[^\d.-]/g,'');
+    const bv=b.cells[col].textContent.replace(/[^\d.-]/g,'');
+    const an=parseFloat(av), bn=parseFloat(bv);
+    const cmp = isNaN(an)||isNaN(bn) ? av.localeCompare(bv,'ru') : an-bn;
+    return dir?cmp:-cmp;
+  });
+  rows.forEach(r=>tbl.tBodies[0].appendChild(r));
+}
+
+// ── ABC/XYZ анализ ──────────────────────────────────────────────────
+let ABC_DATA = [];
+
+function buildABC(data){
+  // Для каждого региона берём лучшую ТК по комбо выкуп+скорость
+  // Используем данные by_region + tk_by_segment для разбивки по ТК
+  const byRegion = {};
+  data.by_city.forEach(c=>{
+    if(!byRegion[c.region]) byRegion[c.region]={region:c.region,total:0,delivered:0,days_sum:0,days_n:0};
+    byRegion[c.region].total += c.total;
+    byRegion[c.region].delivered += c.delivered;
+    if(c.срок_полный_ср){
+      byRegion[c.region].days_sum += c.срок_полный_ср * c.delivered;
+      byRegion[c.region].days_n  += c.delivered;
+    }
+  });
+
+  // Берём by_region как основу
+  ABC_DATA = data.by_region.map(r=>{
+    const dr = r.delivery_rate || 0;
+    const days = r.срок_полный_ср || 99;
+
+    // Нормализованный балл: выкуп 60% + скорость 40%
+    // Выкуп: 0-100%, скорость: инвертируем (меньше дней = лучше, норм к 30 дням макс)
+    const score_vykup = dr;
+    const score_speed = Math.max(0, (1 - days/30)*100);
+    const score = Math.round(score_vykup*0.6 + score_speed*0.4);
+
+    // ABC по баллу
+    const abc = score >= 65 ? 'A' : score >= 45 ? 'B' : 'C';
+    // XYZ по стабильности (% возврата как прокси нестабильности)
+    const ret = r.return_rate || 0;
+    const xyz = ret < 10 ? 'X' : ret < 20 ? 'Y' : 'Z';
+
+    // Рекомендация ТК — ищем по tk_by_segment данным
+    // Ищем в by_tk какая ТК лучше по выкупу с учётом покрытия
+    const tkScores = {};
+    Object.entries(data.tk_by_segment).forEach(([tk, segs])=>{
+      let tot=0, del=0, d_sum=0, d_n=0;
+      segs.forEach(s=>{
+        tot += s.total||0;
+        del += s.delivered||0;
+        if(s.срок_полный_ср){ d_sum += (s.срок_полный_ср||0)*(s.delivered||0); d_n += s.delivered||0; }
+      });
+      if(tot>0){
+        const pct = del/tot*100;
+        const spd = d_n>0 ? d_sum/d_n : 99;
+        tkScores[tk] = Math.round(pct*0.6 + Math.max(0,(1-spd/30)*100)*0.4);
+      }
+    });
+
+    // Лучшая ТК среди Почта/СДЭК/5Post
+    const main_tks = ['5Post','СДЭК','Почта России'];
+    let best_tk='—', best_sc=0;
+    main_tks.forEach(tk=>{
+      if((tkScores[tk]||0) > best_sc){ best_sc=tkScores[tk]; best_tk=tk; }
+    });
+
+    return {
+      region: r.region,
+      total: r.total,
+      delivery_rate: dr,
+      срок_полный_ср: days < 99 ? days : null,
+      return_rate: ret,
+      score, abc, xyz,
+      best_tk,
+      tk_scores: tkScores,
+    };
+  });
+}
+
+function renderABC(){
+  if(!ABC_DATA.length) return;
+  const srt = document.getElementById('abc-sort').value;
+  const rows = [...ABC_DATA].sort((a,b)=>{
+    if(srt==='score') return b.score - a.score;
+    if(srt==='delivery_rate') return b.delivery_rate - a.delivery_rate;
+    if(srt==='срок_полный_ср') return (a.срок_полный_ср||99)-(b.срок_полный_ср||99);
+    return b.total - a.total;
+  });
+
+  const abcColor = {A:'bg',B:'bo',C:'br'};
+  const xyzColor = {X:'bg',Y:'bo',Z:'br'};
+  const tkColor  = {'5Post':'bg','СДЭК':'bb','Почта России':'bo'};
+
+  document.getElementById('abc-body').innerHTML = rows.map(r=>`<tr>
+    <td><strong>${r.region}</strong></td>
+    <td><span class="badge ${tkColor[r.best_tk]||'bb'}">${r.best_tk}</span></td>
+    <td><span class="badge ${abcColor[r.abc]}">${r.abc}</span><span class="badge ${xyzColor[r.xyz]}" style="margin-left:4px">${r.xyz}</span></td>
+    <td>${rbar(r.delivery_rate)}</td>
+    <td class="mono">${fmtD(r.срок_полный_ср)}</td>
+    <td class="mono">${fmt(r.total)}</td>
+    <td><strong class="mono">${r.score}</strong></td>
+    <td class="mono" style="color:var(--soft);font-size:11px">${r.tk_scores['Почта России']||'—'}</td>
+    <td class="mono" style="color:var(--soft);font-size:11px">${r.tk_scores['СДЭК']||'—'}</td>
+    <td class="mono" style="color:var(--soft);font-size:11px">${r.tk_scores['5Post']||'—'}</td>
+  </tr>`).join('');
+}
+
+// ── По месяцам ───────────────────────────────────────────────────────
+let MONTHS_DATA = [];
+
+function renderMonths(){
+  if(!MONTHS_DATA.length) return;
+  const metric = document.getElementById('month-metric').value;
+  const tkFilter = document.getElementById('month-tk').value;
+
+  // Фильтруем данные тренда
+  let rows = MONTHS_DATA;
+
+  const metricLabels = {
+    'delivery_rate':'% выкупа',
+    'total':'Объём заказов',
+    'срок_полный_ср':'Срок доставки (дн.)',
+    'avg_check':'Средний чек (₽)',
+  };
+
+  document.getElementById('months-chart-title').textContent =
+    `Динамика: ${metricLabels[metric]}${tkFilter ? ' · '+tkFilter : ''}`;
+
+  // Таблица
+  document.getElementById('months-body').innerHTML = rows.map(r=>`<tr>
+    <td><strong>${r.month}</strong></td>
+    <td class="mono">${fmt(r.total)}</td>
+    <td class="mono">${fmt(r.delivered)}</td>
+    <td>${rbar(r.delivery_rate)}</td>
+    <td>${badgeR(r.return_rate)}</td>
+    <td class="mono">${fmtD(r.срок_полный_ср)}</td>
+    <td class="mono">${fmtD(r.срок_полный_медиана)}</td>
+    <td class="mono">${fmt(r.avg_check)}</td>
+  </tr>`).join('');
+
+  // График
+  if(charts['ch-months']) charts['ch-months'].destroy();
+  const vals = rows.map(r=> metric==='delivery_rate' ? r[metric] : (r[metric]||0));
+  const color = metric==='delivery_rate' ? '#059669' :
+                metric==='total' ? '#2563EB' :
+                metric==='срок_полный_ср' ? '#D97706' : '#7C3AED';
+
+  charts['ch-months'] = new Chart(document.getElementById('ch-months'),{
+    type: metric==='total' ? 'bar' : 'line',
+    data:{
+      labels: rows.map(r=>r.month),
+      datasets:[{
+        label: metricLabels[metric],
+        data: vals,
+        borderColor: color,
+        backgroundColor: metric==='total' ? color+'99' : color+'22',
+        fill: metric!=='total',
+        tension: .35,
+        borderRadius: 5,
+      }]
+    },
+    options:{
+      plugins:{legend:{display:false}},
+      scales:{y:{beginAtZero: metric!=='avg_check',
+        ticks:{callback: v=> metric==='delivery_rate' ? v+'%' :
+                               metric==='срок_полный_ср' ? v+'д' :
+                               metric==='avg_check' ? v.toLocaleString('ru')+'₽' : v.toLocaleString('ru')}}}
+    }
+  });
+}
+
+// ── История ─────────────────────────────────────────────────────────
+function toggleHist(){ alert('История загрузок доступна при настроенном Supabase (см. .env)'); }
+</script>
+</body>
+</html>
