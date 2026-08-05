@@ -289,25 +289,40 @@ tr:last-child td{border-bottom:none}tr:hover td{background:#FAFAFA}
         </div>
       </div>
 
-      <!-- ПО СЕГМЕНТАМ ГОРОДА -->
+      <!-- ПО СЕГМЕНТАМ ГОРОДА — список городов -->
       <div id="abc-tab-segment" style="display:none">
+        <div class="filters">
+          <select id="abc-seg-select" onchange="renderABCSegment()">
+            <option value="">Все сегменты</option>
+            <option value="до 20 тыс.">до 20 тыс.</option>
+            <option value="20–50 тыс.">20–50 тыс.</option>
+            <option value="50–100 тыс.">50–100 тыс.</option>
+            <option value="100 тыс.+">100 тыс.+</option>
+          </select>
+          <select id="abc-seg-sort" onchange="renderABCSegment()">
+            <option value="score">по баллу</option>
+            <option value="delivery_rate">по % выкупа</option>
+            <option value="срок_полный_ср">по сроку</option>
+            <option value="total">по объёму</option>
+          </select>
+        </div>
         <div class="tbl-wrap">
           <table>
             <thead><tr>
-              <th>Сегмент города</th>
+              <th>Город</th>
+              <th>Регион</th>
+              <th>Сегмент</th>
               <th>Рек. ТК</th>
               <th>Класс</th>
               <th>% выкупа</th>
               <th>Срок, дн.</th>
               <th>Объём</th>
-              <th>Балл (100)</th>
-              <th>Почта</th>
-              <th>СДЭК</th>
-              <th>5Post</th>
+              <th>Балл</th>
             </tr></thead>
             <tbody id="abc-seg-body"></tbody>
           </table>
         </div>
+        <div style="font-size:12px;color:var(--soft);margin-top:8px" id="abc-seg-count"></div>
       </div>
 
       <!-- ТК × СЕГМЕНТ -->
@@ -744,44 +759,63 @@ function abcRow(name, dr, days, ret, total, tkScores){
 }
 
 function renderABCSegment(){
-  if(!ABC_DATA.length) return;
-  const SEGS = ['до 20 тыс.','20–50 тыс.','50–100 тыс.','100 тыс.+'];
-  const seg_data = {};
+  const selSeg  = document.getElementById('abc-seg-select').value;
+  const selSort = document.getElementById('abc-seg-sort').value;
 
-  // Агрегируем by_city по сегменту
-  CITY_DATA.forEach(c=>{
-    const s = c.segment;
-    if(!seg_data[s]) seg_data[s]={total:0,delivered:0,returned:0,days_sum:0,days_n:0};
-    seg_data[s].total     += c.total;
-    seg_data[s].delivered += c.delivered;
-    seg_data[s].returned  += c.returned||0;
-    if(c.срок_полный_ср){ seg_data[s].days_sum += c.срок_полный_ср*c.delivered; seg_data[s].days_n += c.delivered; }
-  });
+  // Берём данные по городам (CITY_DATA) — там есть сегмент, выкуп, срок
+  let rows = CITY_DATA.filter(c => !selSeg || c.segment === selSeg);
 
-  // tkScores по сегменту из tk_by_segment
-  const tk_seg_scores = {};
+  // Считаем балл и рек. ТК для каждого города
+  // Рек. ТК определяем из глобальных данных tk_by_segment для данного сегмента
+  const tkSegScores = {};
   if(window._TK_BY_SEGMENT){
     ['5Post','СДЭК','Почта России'].forEach(tk=>{
       const segs = window._TK_BY_SEGMENT[tk]||[];
       segs.forEach(s=>{
-        if(!tk_seg_scores[s.segment]) tk_seg_scores[s.segment]={};
-        if(s.total>0){
-          const dr = s.delivery_rate||0;
-          const dy = s.срок_полный_ср||20;
-          tk_seg_scores[s.segment][tk] = calcScore(dr,dy);
-        }
+        if(!tkSegScores[s.segment]) tkSegScores[s.segment]={};
+        if(s.total>0) tkSegScores[s.segment][tk] = calcScore(s.delivery_rate||0, s.срок_полный_ср||20);
       });
     });
   }
 
-  document.getElementById('abc-seg-body').innerHTML = SEGS.map(seg=>{
-    const d = seg_data[seg];
-    if(!d||!d.total) return '';
-    const dr  = Math.round(d.delivered/d.total*100*10)/10;
-    const ret = Math.round(d.returned/d.total*100*10)/10;
-    const days = d.days_n>0 ? Math.round(d.days_sum/d.days_n*10)/10 : null;
-    return abcRow(seg, dr, days, ret, d.total, tk_seg_scores[seg]||{});
+  rows = rows.map(c=>{
+    const sc = calcScore(c.delivery_rate||0, c.срок_полный_ср||20);
+    const tks = tkSegScores[c.segment]||{};
+    let best_tk='—', best_sc=0;
+    ['5Post','СДЭК','Почта России'].forEach(tk=>{
+      if((tks[tk]||0)>best_sc){best_sc=tks[tk];best_tk=tk;}
+    });
+    return {...c, score: sc, best_tk};
+  });
+
+  // Сортировка
+  rows.sort((a,b)=>{
+    if(selSort==='score')         return b.score - a.score;
+    if(selSort==='delivery_rate') return (b.delivery_rate||0) - (a.delivery_rate||0);
+    if(selSort==='срок_полный_ср')return (a.срок_полный_ср||99) - (b.срок_полный_ср||99);
+    return b.total - a.total;
+  });
+
+  document.getElementById('abc-seg-body').innerHTML = rows.map(c=>{
+    const abc = abcClass(c.score), xyz = xyzClass(c.return_rate||0);
+    return `<tr>
+      <td><strong>${c.city}</strong></td>
+      <td style="font-size:12px;color:var(--soft)">${c.region}</td>
+      <td>${segBadge(c.segment)}</td>
+      <td><span class="badge ${tkColor[c.best_tk]||'bb'}">${c.best_tk}</span></td>
+      <td>
+        <span class="badge ${abcColor[abc]}">${abc}</span>
+        <span class="badge ${xyzColor[xyz]}" style="margin-left:4px">${xyz}</span>
+      </td>
+      <td>${rbar(c.delivery_rate)}</td>
+      <td class="mono">${fmtD(c.срок_полный_ср)}</td>
+      <td class="mono">${fmt(c.total)}</td>
+      <td><strong class="mono">${c.score}</strong></td>
+    </tr>`;
   }).join('');
+
+  document.getElementById('abc-seg-count').textContent =
+    `Показано: ${rows.length} городов${selSeg ? ' · сегмент «'+selSeg+'»' : ''}`;
 }
 
 function renderABCMatrix(){
