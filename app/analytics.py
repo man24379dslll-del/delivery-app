@@ -28,6 +28,12 @@ def normalize_tk(v):
     if pd.isna(v): return 'Неизвестно'
     return TK_MAP.get(str(v).lower().strip(), str(v))
 
+FINAL_STATUSES = {
+    'Доставлен',
+    'Не доставлен | Вернулся с почты',
+    'Отмена заказа',
+}
+
 def classify_status(s):
     if pd.isna(s): return 'В пути'
     s = str(s).strip()
@@ -58,6 +64,10 @@ def load_and_parse(file_bytes: bytes) -> pd.DataFrame:
     if not dfs:
         raise ValueError("Не найдены листы с чеками")
     data = pd.concat(dfs, ignore_index=True)
+
+    # Исключаем "Первичный заказ" — это заготовки без реального движения
+    # Формула % выкупа: Доставлен / Все (без Первичного заказа)
+    data = data[data['Статус'] != 'Первичный заказ'].copy()
 
     data['ТК']            = data['Способ получения'].apply(normalize_tk)
     data['Сегмент_города']= data['Населенный пункт'].apply(get_population_segment)
@@ -96,15 +106,23 @@ def _block(g: pd.DataFrame) -> dict:
     delivered = (g['Статус_группа'] == 'Доставлен').sum()
     returned  = (g['Статус_группа'] == 'Возврат').sum()
     cancelled = (g['Статус_группа'] == 'Отмена').sum()
-    del_rows  = g[g['Статус_группа'] == 'Доставлен']
-    avg_chk   = del_rows['Сумма'].mean()
+    in_transit= (g['Статус_группа'] == 'В пути').sum()
+    final     = delivered + returned + cancelled
+
+    del_rows = g[g['Статус_группа'] == 'Доставлен']
+    avg_chk  = del_rows['Сумма'].mean()
+
     return {
         'total':          int(total),
         'delivered':      int(delivered),
         'returned':       int(returned),
         'cancelled':      int(cancelled),
-        'delivery_rate':  round(delivered/total*100,1) if total else None,
-        'return_rate':    round(returned/total*100,1)  if total else None,
+        'in_transit':     int(in_transit),
+        'final':          int(final),
+        # % выкупа = Доставлен / Все (без Первичного заказа)
+        'delivery_rate':  round(delivered/total*100, 1) if total else None,
+        'return_rate':    round(returned/total*100, 1)  if total else None,
+        'cancel_rate':    round(cancelled/total*100, 1) if total else None,
         'avg_check':      int(avg_chk) if not pd.isna(avg_chk) else 0,
         'revenue':        int(del_rows['Сумма'].sum()),
         'срок_полный_ср':      safe_mean(del_rows['срок_полный_дн']),

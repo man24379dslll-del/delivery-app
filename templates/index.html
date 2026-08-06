@@ -488,14 +488,16 @@ function render(data, filename, rows){
   // KPI
   const s = data.summary;
   document.getElementById('kpi-row').innerHTML = [
-    {l:'Всего заказов',  v:fmt(s.total),     sub:'в файле',           cls:'c-blue'},
-    {l:'Доставлено',     v:fmt(s.delivered), sub:s.delivery_rate+'%', cls:'c-green'},
-    {l:'Возвраты',       v:fmt(s.returned),  sub:s.return_rate+'%',   cls:'c-red'},
-    {l:'% выкупа',       v:s.delivery_rate+'%', sub:'доставленных',   cls:'c-green'},
-    {l:'Ср. срок (все)', v:fmtD(s.срок_полный_ср)+'дн', sub:'медиана '+fmtD(s.срок_полный_медиана)+'дн', cls:''},
-    {l:'Срок в пути',    v:fmtD(s.срок_в_пути_ср)+'дн',  sub:'среднее',  cls:''},
-    {l:'Ожидание ПВЗ',   v:fmtD(s.срок_ожидания_ср)+'дн',sub:'среднее',  cls:''},
-    {l:'Ср. чек',        v:fmt(s.avg_check)+'₽', sub:'доставленных',  cls:''},
+    {l:'Всего заказов',   v:fmt(s.total),              sub:'в файле',                      cls:'c-blue'},
+    {l:'Финальных',       v:fmt(s.final),              sub:'без заказов в пути',            cls:''},
+    {l:'В пути',          v:fmt(s.in_transit),         sub:'ещё не закрыты',               cls:''},
+    {l:'% выкупа',        v:(s.delivery_rate||0)+'%',  sub:'доставлен / финальных',        cls:'c-green'},
+    {l:'Доставлено',      v:fmt(s.delivered),          sub:'заказов',                      cls:'c-green'},
+    {l:'Возвраты',        v:fmt(s.returned),           sub:(s.return_rate||0)+'% от фин.', cls:'c-red'},
+    {l:'Отмены',          v:fmt(s.cancelled),          sub:(s.cancel_rate||0)+'% от фин.', cls:''},
+    {l:'Ср. срок',        v:fmtD(s.срок_полный_ср)+'дн', sub:'медиана '+fmtD(s.срок_полный_медиана)+'дн', cls:''},
+    {l:'Срок в пути',     v:fmtD(s.срок_в_пути_ср)+'дн',  sub:'среднее',                 cls:''},
+    {l:'Ср. чек',         v:fmt(s.avg_check)+'₽',     sub:'доставленных',                 cls:''},
   ].map(k=>`<div class="kpi ${k.cls}">
     <div class="kpi-l">${k.l}</div>
     <div class="kpi-v">${k.v}</div>
