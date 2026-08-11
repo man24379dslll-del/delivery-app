@@ -135,6 +135,7 @@ tr:last-child td{border-bottom:none}tr:hover td{background:#FAFAFA}
       <div class="tab" onclick="showTab('seg')">По размеру города</div>
       <div class="tab" onclick="showTab('city')">По городам</div>
       <div class="tab" onclick="showTab('region')">По регионам</div>
+      <div class="tab" onclick="showTab('constructor')">🎛 Конструктор рейтинга</div>
       <div class="tab" onclick="showTab('abc')">ABC/XYZ анализ</div>
       <div class="tab" onclick="showTab('months')">По месяцам</div>
       <div class="tab" onclick="showTab('matrix')">Матрица ТК × Сегмент</div>
@@ -243,6 +244,128 @@ tr:last-child td{border-bottom:none}tr:hover td{background:#FAFAFA}
           <tbody id="reg-body"></tbody>
         </table>
       </div>
+    </div>
+
+    <!-- КОНСТРУКТОР РЕЙТИНГА -->
+    <div class="tab-content" id="tab-constructor">
+
+      <div style="background:var(--card);border:1px solid var(--border);border-radius:12px;padding:24px;margin-bottom:20px">
+        <div style="font-size:15px;font-weight:700;margin-bottom:6px">Настройте критерии рейтинга</div>
+        <div style="font-size:12px;color:var(--soft);margin-bottom:20px">
+          Включите нужные критерии и задайте вес каждому. Веса нормализуются автоматически. Рейтинг считается для каждого города — показывает какая ТК выгоднее с учётом ваших приоритетов.
+        </div>
+
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:20px">
+
+          <!-- Выкуп -->
+          <div style="border:2px solid var(--blue);border-radius:10px;padding:16px" id="crit-box-vykup">
+            <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px">
+              <input type="checkbox" id="crit-vykup" checked onchange="updateConstructor()" style="width:18px;height:18px;cursor:pointer">
+              <label for="crit-vykup" style="font-weight:700;font-size:14px;cursor:pointer">✅ % выкупа</label>
+              <span style="margin-left:auto;font-size:11px;color:var(--soft)">чем выше — лучше</span>
+            </div>
+            <div style="font-size:12px;color:var(--soft);margin-bottom:10px">Доля доставленных заказов из всех (без Первичного заказа)</div>
+            <div style="display:flex;align-items:center;gap:10px">
+              <span style="font-size:12px;color:var(--soft);width:40px">Вес:</span>
+              <input type="range" id="w-vykup" min="0" max="100" value="50" oninput="updateWeightLabel('vykup');updateConstructor()" style="flex:1">
+              <span id="wl-vykup" style="font-family:monospace;font-size:13px;font-weight:700;width:36px;color:var(--accent)">50%</span>
+            </div>
+          </div>
+
+          <!-- Возврат -->
+          <div style="border:2px solid var(--blue);border-radius:10px;padding:16px" id="crit-box-vozvrat">
+            <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px">
+              <input type="checkbox" id="crit-vozvrat" checked onchange="updateConstructor()" style="width:18px;height:18px;cursor:pointer">
+              <label for="crit-vozvrat" style="font-weight:700;font-size:14px;cursor:pointer">✅ % возврата</label>
+              <span style="margin-left:auto;font-size:11px;color:var(--soft)">чем ниже — лучше</span>
+            </div>
+            <div style="font-size:12px;color:var(--soft);margin-bottom:10px">Доля заказов, вернувшихся с почты</div>
+            <div style="display:flex;align-items:center;gap:10px">
+              <span style="font-size:12px;color:var(--soft);width:40px">Вес:</span>
+              <input type="range" id="w-vozvrat" min="0" max="100" value="30" oninput="updateWeightLabel('vozvrat');updateConstructor()" style="flex:1">
+              <span id="wl-vozvrat" style="font-family:monospace;font-size:13px;font-weight:700;width:36px;color:var(--accent)">30%</span>
+            </div>
+          </div>
+
+          <!-- Тариф -->
+          <div style="border:2px solid var(--border);border-radius:10px;padding:16px;opacity:0.6" id="crit-box-tarif">
+            <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px">
+              <input type="checkbox" id="crit-tarif" onchange="updateConstructor()" style="width:18px;height:18px;cursor:pointer">
+              <label for="crit-tarif" style="font-weight:700;font-size:14px;cursor:pointer">☐ Тариф (стоимость доставки)</label>
+              <span style="margin-left:auto;font-size:11px;color:var(--soft)">чем дешевле — лучше</span>
+            </div>
+            <div style="font-size:12px;color:var(--soft);margin-bottom:10px">Средняя стоимость доставки через ТК из данных заказов</div>
+            <div style="display:flex;align-items:center;gap:10px">
+              <span style="font-size:12px;color:var(--soft);width:40px">Вес:</span>
+              <input type="range" id="w-tarif" min="0" max="100" value="20" oninput="updateWeightLabel('tarif');updateConstructor()" style="flex:1" disabled>
+              <span id="wl-tarif" style="font-family:monospace;font-size:13px;font-weight:700;width:36px;color:var(--accent)">20%</span>
+            </div>
+          </div>
+
+          <!-- Срок -->
+          <div style="border:2px solid var(--border);border-radius:10px;padding:16px;opacity:0.6" id="crit-box-srok">
+            <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px">
+              <input type="checkbox" id="crit-srok" onchange="updateConstructor()" style="width:18px;height:18px;cursor:pointer">
+              <label for="crit-srok" style="font-weight:700;font-size:14px;cursor:pointer">☐ Срок доставки</label>
+              <span style="margin-left:auto;font-size:11px;color:var(--soft)">чем меньше — лучше</span>
+            </div>
+            <div style="font-size:12px;color:var(--soft);margin-bottom:10px">Среднее число дней от создания заказа до вручения</div>
+            <div style="display:flex;align-items:center;gap:10px">
+              <span style="font-size:12px;color:var(--soft);width:40px">Вес:</span>
+              <input type="range" id="w-srok" min="0" max="100" value="20" oninput="updateWeightLabel('srok');updateConstructor()" style="flex:1" disabled>
+              <span id="wl-srok" style="font-family:monospace;font-size:13px;font-weight:700;width:36px;color:var(--accent)">20%</span>
+            </div>
+          </div>
+
+        </div>
+
+        <!-- Итоговые веса -->
+        <div style="display:flex;align-items:center;gap:16px;padding:12px 16px;background:var(--bg);border-radius:8px;font-size:13px">
+          <span style="color:var(--soft)">Итоговые веса:</span>
+          <span id="final-weights" style="font-weight:700;font-family:monospace"></span>
+          <span style="margin-left:auto;color:var(--soft);font-size:12px" id="crit-count"></span>
+        </div>
+
+        <!-- Фильтры -->
+        <div class="filters" style="margin-top:16px">
+          <input type="text" id="con-search" placeholder="🔍 Поиск по городу..." oninput="renderConstructor()">
+          <select id="con-seg" onchange="renderConstructor()">
+            <option value="">Все сегменты</option>
+            <option>до 20 тыс.</option>
+            <option>20–50 тыс.</option>
+            <option>50–100 тыс.</option>
+            <option>100 тыс.+</option>
+          </select>
+          <select id="con-mincnt" onchange="renderConstructor()">
+            <option value="20">Мин. заказов: 20</option>
+            <option value="50">Мин. заказов: 50</option>
+            <option value="100">Мин. заказов: 100</option>
+            <option value="5">Мин. заказов: 5</option>
+          </select>
+        </div>
+      </div>
+
+      <!-- Результат -->
+      <div class="tbl-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>Город</th>
+              <th>Регион</th>
+              <th>Сегмент</th>
+              <th>Заказов</th>
+              <th id="th-best">Лучшая ТК</th>
+              <th>Итог. балл</th>
+              <th id="th-v">% выкупа</th>
+              <th id="th-r">% возврата</th>
+              <th id="th-t">Тариф, ₽</th>
+              <th id="th-s">Срок, дн.</th>
+            </tr>
+          </thead>
+          <tbody id="constructor-body"></tbody>
+        </table>
+      </div>
+      <div style="font-size:12px;color:var(--soft);margin-top:8px" id="con-count"></div>
     </div>
 
     <!-- ABC/XYZ -->
@@ -451,13 +574,14 @@ async function go(file){
 // ── Tabs ────────────────────────────────────────────────────────────
 function showTab(id){
   document.querySelectorAll('.tab').forEach((t,i)=>{
-    const ids=['tk','seg','city','region','abc','months','matrix','charts'];
+    const ids=['tk','seg','city','region','constructor','abc','months','matrix','charts'];
     t.classList.toggle('active', ids[i]===id);
   });
   document.querySelectorAll('.tab-content').forEach(c=>c.classList.remove('active'));
   document.getElementById('tab-'+id).classList.add('active');
   if(id==='abc') renderABC();
   if(id==='months') renderMonths();
+  if(id==='constructor') { updateConstructor(); }
 }
 
 // ── Helpers ─────────────────────────────────────────────────────────
@@ -712,6 +836,144 @@ function sortTbl(tblId, col){
     return dir?cmp:-cmp;
   });
   rows.forEach(r=>tbl.tBodies[0].appendChild(r));
+}
+
+// ── Конструктор рейтинга ────────────────────────────────────────────
+
+function updateWeightLabel(key){
+  const v = document.getElementById('w-'+key).value;
+  document.getElementById('wl-'+key).textContent = v+'%';
+}
+
+function getWeights(){
+  const crits = ['vykup','vozvrat','tarif','srok'];
+  const active = crits.filter(c => document.getElementById('crit-'+c).checked);
+  if(!active.length) return {};
+  const raw = {};
+  let total = 0;
+  active.forEach(c => {
+    const v = parseInt(document.getElementById('w-'+c).value) || 0;
+    raw[c] = v; total += v;
+  });
+  if(total === 0) { active.forEach(c => raw[c] = 1); total = active.length; }
+  const norm = {};
+  active.forEach(c => norm[c] = raw[c]/total);
+  return norm;
+}
+
+function updateConstructor(){
+  const w = getWeights();
+  const crits = ['vykup','vozvrat','tarif','srok'];
+  const labels = {vykup:'% выкупа', vozvrat:'% возврата', tarif:'тариф', srok:'срок'};
+  crits.forEach(c=>{
+    const active = document.getElementById('crit-'+c).checked;
+    const box = document.getElementById('crit-box-'+c);
+    box.style.borderColor = active ? 'var(--blue)' : 'var(--border)';
+    box.style.opacity = active ? '1' : '0.6';
+    document.getElementById('w-'+c).disabled = !active;
+  });
+  const parts = Object.entries(w).map(([k,v])=>`${labels[k]}: <b>${Math.round(v*100)}%</b>`);
+  document.getElementById('final-weights').innerHTML = parts.join(' + ') || '—';
+  document.getElementById('crit-count').textContent =
+    `Активных критериев: ${Object.keys(w).length} из 4`;
+  renderConstructor();
+}
+
+function renderConstructor(){
+  if(!CITY_DATA.length) return;
+
+  const w = getWeights();
+  if(!Object.keys(w).length){
+    document.getElementById('constructor-body').innerHTML =
+      '<tr><td colspan="9" style="text-align:center;color:var(--soft);padding:32px">Выберите хотя бы один критерий</td></tr>';
+    return;
+  }
+
+  const search   = document.getElementById('con-search').value.toLowerCase();
+  const seg      = document.getElementById('con-seg').value;
+  const minCnt   = parseInt(document.getElementById('con-mincnt').value)||20;
+
+  // Для каждого города считаем балл для каждой ТК
+  // Нормируем каждый критерий в диапазоне 0-1 по всем городам
+  let rows = CITY_DATA.filter(c =>
+    c.total >= minCnt &&
+    (!search || c.city.toLowerCase().includes(search)) &&
+    (!seg || c.segment === seg)
+  );
+
+  if(!rows.length){
+    document.getElementById('constructor-body').innerHTML =
+      '<tr><td colspan="9" style="text-align:center;color:var(--soft);padding:32px">Нет данных по выбранным фильтрам</td></tr>';
+    document.getElementById('con-count').textContent = '';
+    return;
+  }
+
+  // Глобальные min/max для нормализации
+  const allDR   = rows.map(r=>r.delivery_rate||0);
+  const allRR   = rows.map(r=>r.return_rate||0);
+  const allDay  = rows.map(r=>r.срок_полный_ср||0).filter(v=>v>0);
+  const allTar  = rows.map(r=>r.avg_delivery_cost||0).filter(v=>v>0);
+  const minDR=Math.min(...allDR),  maxDR=Math.max(...allDR);
+  const minRR=Math.min(...allRR),  maxRR=Math.max(...allRR);
+  const minDay=allDay.length?Math.min(...allDay):0, maxDay=allDay.length?Math.max(...allDay):1;
+  const minTar=allTar.length?Math.min(...allTar):0, maxTar=allTar.length?Math.max(...allTar):1;
+
+  function norm(val, mn, mx, invert=false){
+    if(!val || mx===mn) return 0.5;
+    const n = (val-mn)/(mx-mn);
+    return invert ? 1-n : n;
+  }
+
+  rows = rows.map(r=>{
+    const dr  = r.delivery_rate||0;
+    const ret = r.return_rate||0;
+    const day = r.срок_полный_ср||0;
+    const tar = r.avg_delivery_cost||0;
+
+    let score = 0;
+    if(w.vykup)             score += w.vykup   * norm(dr,  minDR,  maxDR,  false);
+    if(w.vozvrat)           score += w.vozvrat * norm(ret, minRR,  maxRR,  true);
+    if(w.srok   && day>0)  score += w.srok    * norm(day, minDay, maxDay, true);
+    if(w.tarif  && tar>0)  score += w.tarif   * norm(tar, minTar, maxTar, true);
+
+    return {...r, score: Math.round(score*100)};
+  });
+
+  // Сортировка по баллу
+  rows.sort((a,b) => b.score - a.score);
+
+  // Цвет балла
+  const maxScore = Math.max(...rows.map(r=>r.score));
+  const minScore = Math.min(...rows.map(r=>r.score));
+  function scoreColor(s){
+    const pct = maxScore===minScore ? 0.5 : (s-minScore)/(maxScore-minScore);
+    if(pct>=0.66) return 'var(--green)';
+    if(pct>=0.33) return 'var(--orange)';
+    return 'var(--red)';
+  }
+
+  // Скрываем неактивные колонки
+  ['v','r','s'].forEach((k,i)=>{
+    const crits=['vykup','vozvrat','srok'];
+    const show = document.getElementById('crit-'+crits[i]).checked;
+    document.getElementById('th-'+k).style.display = show?'':'none';
+  });
+
+  document.getElementById('constructor-body').innerHTML = rows.map(r=>`<tr>
+    <td><strong>${r.city}</strong></td>
+    <td style="font-size:12px;color:var(--soft)">${r.region}</td>
+    <td>${segBadge(r.segment)}</td>
+    <td class="mono">${fmt(r.total)}</td>
+    <td><span class="badge bb">по баллу</span></td>
+    <td><strong class="mono" style="color:${scoreColor(r.score)};font-size:15px">${r.score}</strong></td>
+    <td style="${document.getElementById('crit-vykup').checked?'':'display:none'}">${rbar(r.delivery_rate)}</td>
+    <td style="${document.getElementById('crit-vozvrat').checked?'':'display:none'}">${badgeR(r.return_rate)}</td>
+    <td style="${document.getElementById('crit-tarif').checked?'':'display:none'}" class="mono">${r.avg_delivery_cost?fmt(r.avg_delivery_cost)+'₽':'—'}</td>
+    <td style="${document.getElementById('crit-srok').checked?'':'display:none'}" class="mono">${fmtD(r.срок_полный_ср)}</td>
+  </tr>`).join('');
+
+  document.getElementById('con-count').textContent =
+    `Показано: ${rows.length} городов · отсортировано по итоговому баллу`;
 }
 
 // ── ABC sub-tabs ─────────────────────────────────────────────────────
