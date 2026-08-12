@@ -171,6 +171,9 @@ def calc_tk_by_segment(data):
         result[tk] = seg_rows
     return result
 
+MAIN_TKS = ['5Post', 'СДЭК', 'Почта России', 'Курьер (стационар)', 'Курьер (свой)']
+MIN_TK_ORDERS = 10  # минимум заказов через ТК для надёжности
+
 def calc_by_city(data, min_orders=20):
     rows = []
     for (city, region), g in data.groupby(['Населенный пункт','Регион']):
@@ -179,6 +182,26 @@ def calc_by_city(data, min_orders=20):
         r['city']    = city
         r['region']  = region
         r['segment'] = get_population_segment(city)
+
+        # Разбивка по ТК внутри города
+        tk_data = {}
+        for tk, tg in g.groupby('ТК'):
+            if tk not in MAIN_TKS: continue
+            total = len(tg)
+            if total < MIN_TK_ORDERS: continue
+            delivered = (tg['Статус_группа']=='Доставлен').sum()
+            returned  = (tg['Статус_группа']=='Возврат').sum()
+            avg_dc    = tg['Стоимость доставки'].replace(0, np.nan).mean()
+            days      = safe_mean(tg[tg['Статус_группа']=='Доставлен']['срок_полный_дн'])
+            tk_data[tk] = {
+                'total':         int(total),
+                'delivery_rate': round(delivered/total*100, 1) if total else None,
+                'return_rate':   round(returned/total*100, 1)  if total else None,
+                'avg_cost':      round(float(avg_dc), 1) if not pd.isna(avg_dc) else None,
+                'days':          days,
+            }
+
+        r['tk_breakdown'] = tk_data
         rows.append(r)
     rows.sort(key=lambda x: x['total'], reverse=True)
     return rows[:300]

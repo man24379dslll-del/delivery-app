@@ -924,19 +924,48 @@ function renderConstructor(){
     return invert ? 1-n : n;
   }
 
+  // Собираем глобальные min/max по ТК внутри городов (для нормализации тарифа)
+  const allTarTK = [], allDayTK = [], allDRtk = [], allRRtk = [];
+  rows.forEach(r=>{
+    const tkd = r.tk_breakdown||{};
+    Object.values(tkd).forEach(t=>{
+      if(t.delivery_rate!=null) allDRtk.push(t.delivery_rate);
+      if(t.return_rate!=null)   allRRtk.push(t.return_rate);
+      if(t.avg_cost!=null)      allTarTK.push(t.avg_cost);
+      if(t.days!=null)          allDayTK.push(t.days);
+    });
+  });
+  const mnDRtk=Math.min(...allDRtk)||0,  mxDRtk=Math.max(...allDRtk)||100;
+  const mnRRtk=Math.min(...allRRtk)||0,  mxRRtk=Math.max(...allRRtk)||100;
+  const mnTar=Math.min(...allTarTK)||0,  mxTar=Math.max(...allTarTK)||1000;
+  const mnDay=Math.min(...allDayTK)||0,  mxDay=Math.max(...allDayTK)||30;
+
   rows = rows.map(r=>{
-    const dr  = r.delivery_rate||0;
-    const ret = r.return_rate||0;
-    const day = r.срок_полный_ср||0;
-    const tar = r.avg_delivery_cost||0;
+    const tkd = r.tk_breakdown||{};
+    const tkNames = Object.keys(tkd);
 
-    let score = 0;
-    if(w.vykup)             score += w.vykup   * norm(dr,  minDR,  maxDR,  false);
-    if(w.vozvrat)           score += w.vozvrat * norm(ret, minRR,  maxRR,  true);
-    if(w.srok   && day>0)  score += w.srok    * norm(day, minDay, maxDay, true);
-    if(w.tarif  && tar>0)  score += w.tarif   * norm(tar, minTar, maxTar, true);
+    let bestTK='—', bestScore=-1, bestData={};
 
-    return {...r, score: Math.round(score*100)};
+    if(tkNames.length > 0){
+      tkNames.forEach(tk=>{
+        const t = tkd[tk];
+        let sc = 0;
+        if(w.vykup   && t.delivery_rate!=null) sc += w.vykup   * norm(t.delivery_rate, mnDRtk, mxDRtk, false);
+        if(w.vozvrat && t.return_rate!=null)   sc += w.vozvrat * norm(t.return_rate,   mnRRtk, mxRRtk, true);
+        if(w.tarif   && t.avg_cost!=null)      sc += w.tarif   * norm(t.avg_cost,      mnTar,  mxTar,  true);
+        if(w.srok    && t.days!=null)          sc += w.srok    * norm(t.days,           mnDay,  mxDay,  true);
+        if(sc > bestScore){ bestScore=sc; bestTK=tk; bestData=t; }
+      });
+    } else {
+      // Нет разбивки по ТК — используем общий балл города
+      const dr=r.delivery_rate||0, ret=r.return_rate||0, day=r.срок_полный_ср||0;
+      bestScore = 0;
+      if(w.vykup)   bestScore += w.vykup   * norm(dr,  minDR,  maxDR,  false);
+      if(w.vozvrat) bestScore += w.vozvrat * norm(ret, minRR,  maxRR,  true);
+      if(w.srok && day>0) bestScore += w.srok * norm(day, minDay, maxDay, true);
+    }
+
+    return {...r, score: Math.round(bestScore*100), bestTK, bestData};
   });
 
   // Сортировка по баллу
@@ -964,11 +993,14 @@ function renderConstructor(){
     <td style="font-size:12px;color:var(--soft)">${r.region}</td>
     <td>${segBadge(r.segment)}</td>
     <td class="mono">${fmt(r.total)}</td>
-    <td><span class="badge bb">по баллу</span></td>
+    <td>
+      <span class="badge ${r.bestTK==='5Post'?'bg':r.bestTK==='СДЭК'?'bb':r.bestTK==='Почта России'?'bo':'bb'}">${r.bestTK}</span>
+      ${r.bestData.delivery_rate!=null?`<div style="font-size:10px;color:var(--soft);margin-top:3px">${r.bestData.delivery_rate}% / ${r.bestData.return_rate}%${r.bestData.days?` / ${r.bestData.days}д`:''}</div>`:''}
+    </td>
     <td><strong class="mono" style="color:${scoreColor(r.score)};font-size:15px">${r.score}</strong></td>
     <td style="${document.getElementById('crit-vykup').checked?'':'display:none'}">${rbar(r.delivery_rate)}</td>
     <td style="${document.getElementById('crit-vozvrat').checked?'':'display:none'}">${badgeR(r.return_rate)}</td>
-    <td style="${document.getElementById('crit-tarif').checked?'':'display:none'}" class="mono">${r.avg_delivery_cost?fmt(r.avg_delivery_cost)+'₽':'—'}</td>
+    <td style="${document.getElementById('crit-tarif').checked?'':'display:none'}" class="mono">${r.bestData.avg_cost?fmt(r.bestData.avg_cost)+'₽':'—'}</td>
     <td style="${document.getElementById('crit-srok').checked?'':'display:none'}" class="mono">${fmtD(r.срок_полный_ср)}</td>
   </tr>`).join('');
 
