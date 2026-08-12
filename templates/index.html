@@ -678,6 +678,7 @@ function render(data, filename, rows){
 
   // Месяцы
   MONTHS_DATA = data.trend || [];
+  MONTHS_DATA_BY_TK = data.trend_by_tk || {};
 
   // Матрица
   renderMatrix(data.tk_by_segment, data.segments_order);
@@ -1253,14 +1254,17 @@ function renderABC(){
 
 // ── По месяцам ───────────────────────────────────────────────────────
 let MONTHS_DATA = [];
+let MONTHS_DATA_BY_TK = {};
 
 function renderMonths(){
-  if(!MONTHS_DATA.length) return;
-  const metric = document.getElementById('month-metric').value;
+  const metric   = document.getElementById('month-metric').value;
   const tkFilter = document.getElementById('month-tk').value;
 
-  // Фильтруем данные тренда
-  let rows = MONTHS_DATA;
+  // Берём данные по конкретной ТК или общие
+  let rows = tkFilter && MONTHS_DATA_BY_TK[tkFilter]
+    ? MONTHS_DATA_BY_TK[tkFilter]
+    : MONTHS_DATA;
+  if(!rows || !rows.length) return;
 
   const metricLabels = {
     'delivery_rate':'% выкупа',

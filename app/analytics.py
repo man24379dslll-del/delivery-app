@@ -224,6 +224,20 @@ def calc_trend(data):
         rows.append(r)
     return rows
 
+def calc_trend_by_tk(data):
+    """Тренд по месяцам отдельно для каждой ТК."""
+    if 'Дата создания' not in data.columns: return {}
+    d = data.dropna(subset=['Дата создания']).copy()
+    d['month'] = d['Дата создания'].dt.to_period('M').astype(str)
+    result = {}
+    for tk, tk_group in d.groupby('ТК'):
+        rows = []
+        for month, g in sorted(tk_group.groupby('month')):
+            r = _block(g); r['month'] = month
+            rows.append(r)
+        result[tk] = rows
+    return result
+
 def run_full_analytics(data: pd.DataFrame) -> dict:
     return {
         'summary':        calc_summary(data),
@@ -233,5 +247,6 @@ def run_full_analytics(data: pd.DataFrame) -> dict:
         'by_city':        calc_by_city(data, min_orders=20),
         'by_region':      calc_by_region(data),
         'trend':          calc_trend(data),
+        'trend_by_tk':    calc_trend_by_tk(data),
         'segments_order': SEGMENTS_ORDER,
     }
