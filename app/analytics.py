@@ -4,6 +4,21 @@ import numpy as np
 import sys, os
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
 from data.cities_population import get_population_segment, SEGMENTS_ORDER
+from data.tariffs import (load_tariffs, get_tariff_for_region,
+                          COURIER_TARIFF_CITY, COURIER_TARIFF_REGION,
+                          normalize_region_key)
+import data.tariffs as _tariffs_module
+
+# Глобальный кэш последнего загруженного файла (для /api/filter)
+_LAST_DATA = None
+
+def set_last_data(data):
+    global _LAST_DATA
+    _LAST_DATA = data
+
+def get_last_data():
+    return _LAST_DATA
+
 
 DELIVERY_SHEETS = ['Чеки ЗДР 26', 'Чеки увел 26']
 STATUS_DELIVERED = 'Доставлен'
@@ -52,9 +67,56 @@ def safe_median(series, lo=0, hi=120):
     s = s[s.between(lo, hi)]
     return round(float(s.median()), 1) if not s.empty else None
 
+def load_tariffs_from_xl(xl) -> dict:
+    """Загружает тарифы прямо из уже открытого ExcelFile."""
+    import re
+    if 'Срок+выкуп+тариф' not in xl.sheet_names:
+        return {}
+    raw = pd.read_excel(xl, sheet_name='Срок+выкуп+тариф', header=None)
+
+    def clean_t(v):
+        if pd.isna(v): return None
+        s = re.sub(r'[^\d.]', '', str(v).replace(',','.').replace(' ',''))
+        try: return float(s) if s else None
+        except: return None
+
+    def clean_r(v):
+        if pd.isna(v): return None
+        return str(v).strip().lower().rstrip('.')
+
+    COL_MAP = {
+        '5Post':        (0, 4),
+        'СДЭК':         (6, 10),
+        'СДЭК ПВЗ':    (6, 14),
+        'Почта России': (17, 22),
+    }
+    result = {}
+    for tk, (rc, tc) in COL_MAP.items():
+        for i in range(2, len(raw)):
+            reg = clean_r(raw.iat[i, rc])
+            tar = clean_t(raw.iat[i, tc])
+            if not reg or not tar or tar < 50: continue
+            if reg not in result: result[reg] = {}
+            if tk == 'СДЭК ПВЗ':
+                result[reg]['СДЭК ПВЗ'] = tar
+            else:
+                result[reg][tk] = tar
+    return result
+
+
 def load_and_parse(file_bytes: bytes) -> pd.DataFrame:
     import io
     xl = pd.ExcelFile(io.BytesIO(file_bytes))
+
+    # Загружаем тарифный справочник из файла (если есть нужный лист)
+    try:
+        tariffs = load_tariffs_from_xl(xl)
+        if tariffs:
+            _tariffs_module.TARIFFS = tariffs
+            print(f'[tariffs] Загружено {len(tariffs)} регионов из файла')
+    except Exception as e:
+        print(f'[tariffs skip] {e}')
+
     dfs = []
     for sheet in DELIVERY_SHEETS:
         if sheet in xl.sheet_names:
@@ -125,8 +187,26 @@ def load_and_parse(file_bytes: bytes) -> pd.DataFrame:
         except Exception as e:
             print(f'[Почта tariff] {e}')
 
-    # Если тариф_факт не подтянулся — берём Стоимость доставки как запасной
+    # Если тариф_факт не подтянулся — пробуем справочник по региону, потом Стоимость доставки
     data['тариф_факт'] = pd.to_numeric(data['тариф_факт'], errors='coerce')
+    no_tarif = data['тариф_факт'].isna()
+
+    # Курьерская своя: 100+ тыс. = 400₽, прочие = 500₽
+    mk = no_tarif & (data['ТК'] == 'Курьер (свой)')
+    data.loc[mk, 'тариф_факт'] = data.loc[mk, 'Сегмент_города'].map(
+        lambda s: COURIER_TARIFF_CITY if s == '100 тыс.+' else COURIER_TARIFF_REGION
+    )
+
+    # Справочник по региону для остальных ТК
+    no_tarif = data['тариф_факт'].isna()
+    if no_tarif.any() and _tariffs_module.TARIFFS:
+        def lookup_tariff(row):
+            if pd.notna(row['тариф_факт']): return row['тариф_факт']
+            t = get_tariff_for_region(row.get('Регион',''), row['ТК'])
+            return t if t else np.nan
+        data.loc[no_tarif, 'тариф_факт'] = data[no_tarif].apply(lookup_tariff, axis=1)
+
+    # Последний fallback — колонка Стоимость доставки
     no_tarif = data['тариф_факт'].isna()
     data.loc[no_tarif, 'тариф_факт'] = data.loc[no_tarif, 'Стоимость доставки'].replace(0, np.nan)
 
@@ -326,15 +406,65 @@ def calc_trend_by_tk(data):
         result[tk] = rows
     return result
 
-def run_full_analytics(data: pd.DataFrame) -> dict:
+def get_available_months(data: pd.DataFrame) -> list:
+    """Возвращает список доступных месяцев в данных."""
+    if 'Дата создания' not in data.columns:
+        return []
+    months = data['Дата создания'].dt.to_period('M').dropna().astype(str).unique()
+    return sorted(months.tolist())
+
+
+def filter_by_month(data: pd.DataFrame, month: str) -> pd.DataFrame:
+    """Фильтрует данные по месяцу создания заказа."""
+    if not month or 'Дата создания' not in data.columns:
+        return data
+    mask = data['Дата создания'].dt.to_period('M').astype(str) == month
+    return data[mask].copy()
+
+
+def calc_segment_matrix(data: pd.DataFrame) -> dict:
+    """
+    Матрица: для каждого сегмента города — список городов с метриками.
+    Возвращает {сегмент: [{'city':..,'delivery_rate':..,'finrez':..}, ...]}
+    """
+    result = {}
+    for seg in SEGMENTS_ORDER:
+        g = data[data['Сегмент_города'] == seg]
+        cities = []
+        for (city, region), cg in g.groupby(['Населенный пункт','Регион']):
+            if len(cg) < 10: continue
+            r = _block(cg)
+            cities.append({
+                'city':          city,
+                'region':        region,
+                'total':         r['total'],
+                'delivery_rate': r['delivery_rate'],
+                'return_rate':   r['return_rate'],
+                'finrez':        r['finrez'],
+                'roi':           r['roi'],
+                'avg_check':     r['avg_check'],
+                'avg_tarif':     r['avg_tarif'],
+            })
+        cities.sort(key=lambda x: x['total'], reverse=True)
+        result[seg] = cities[:50]  # топ-50 городов в каждом сегменте
+    return result
+
+
+def run_full_analytics(data: pd.DataFrame, month: str = '') -> dict:
+    # Применяем фильтр по месяцу если задан
+    filtered = filter_by_month(data, month) if month else data
+
     return {
-        'summary':        calc_summary(data),
-        'by_tk':          calc_by_tk(data),
-        'by_segment':     calc_by_segment(data),
-        'tk_by_segment':  calc_tk_by_segment(data),
-        'by_city':        calc_by_city(data, min_orders=20),
-        'by_region':      calc_by_region(data),
-        'trend':          calc_trend(data),
-        'trend_by_tk':    calc_trend_by_tk(data),
-        'segments_order': SEGMENTS_ORDER,
+        'summary':         calc_summary(filtered),
+        'by_tk':           calc_by_tk(filtered),
+        'by_segment':      calc_by_segment(filtered),
+        'tk_by_segment':   calc_tk_by_segment(filtered),
+        'by_city':         calc_by_city(filtered, min_orders=10),
+        'by_region':       calc_by_region(filtered),
+        'trend':           calc_trend(data),       # тренд всегда по всем данным
+        'trend_by_tk':     calc_trend_by_tk(data), # тренд всегда по всем данным
+        'segment_matrix':  calc_segment_matrix(filtered),
+        'segments_order':  SEGMENTS_ORDER,
+        'available_months': get_available_months(data),
+        'active_month':    month,
     }

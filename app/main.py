@@ -1,9 +1,8 @@
 # -*- coding: utf-8 -*-
 import os, json, io
 from datetime import datetime
-from typing import Optional
 
-from fastapi import FastAPI, UploadFile, File, HTTPException
+from fastapi import FastAPI, UploadFile, File, HTTPException, Query
 from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
@@ -11,14 +10,8 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.analytics import load_and_parse, run_full_analytics
 from app.database import save_upload, get_uploads, get_analytics_by_upload
 
-# Лимит 200 МБ на загрузку файлов
-app = FastAPI(
-    title="Аналитика доставки ТК",
-    version="1.0",
-)
+app = FastAPI(title="Аналитика доставки ТК", version="1.0")
 
-# Увеличиваем лимит тела запроса через uvicorn — задаётся в Procfile
-# Здесь добавляем middleware для больших файлов
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -29,6 +22,10 @@ app.add_middleware(
 BASE_DIR = os.path.dirname(os.path.dirname(__file__))
 app.mount("/static", StaticFiles(directory=os.path.join(BASE_DIR, "static")), name="static")
 
+# Кэш последнего загруженного файла (в памяти процесса)
+_cached_data = None
+_cached_filename = None
+
 
 @app.get("/", response_class=HTMLResponse)
 async def index():
@@ -38,6 +35,8 @@ async def index():
 
 @app.post("/api/upload")
 async def upload_file(file: UploadFile = File(...)):
+    global _cached_data, _cached_filename
+
     if not file.filename.endswith(('.xlsx', '.xls')):
         raise HTTPException(400, "Только Excel-файлы (.xlsx, .xls)")
 
@@ -47,6 +46,10 @@ async def upload_file(file: UploadFile = File(...)):
         data = load_and_parse(file_bytes)
     except Exception as e:
         raise HTTPException(422, f"Ошибка парсинга файла: {e}")
+
+    # Кэшируем для перефильтрации по месяцу
+    _cached_data = data
+    _cached_filename = file.filename
 
     analytics = run_full_analytics(data)
 
@@ -67,6 +70,24 @@ async def upload_file(file: UploadFile = File(...)):
         "rows":      len(data),
         "analytics": analytics,
     })
+
+
+@app.get("/api/filter")
+async def filter_by_month(month: str = Query(default="")):
+    """Перефильтровывает аналитику по месяцу без повторной загрузки файла."""
+    global _cached_data, _cached_filename
+    if _cached_data is None:
+        raise HTTPException(400, "Сначала загрузите файл")
+    try:
+        analytics = run_full_analytics(_cached_data, month=month)
+        return JSONResponse({
+            "status":   "ok",
+            "filename": _cached_filename,
+            "rows":     len(_cached_data),
+            "analytics": analytics,
+        })
+    except Exception as e:
+        raise HTTPException(500, str(e))
 
 
 @app.get("/api/uploads")

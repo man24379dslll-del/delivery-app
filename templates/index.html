@@ -126,6 +126,46 @@ tr:last-child td{border-bottom:none}tr:hover td{background:#FAFAFA}
 .tk-stat .sv{font-family:'JetBrains Mono',monospace;font-weight:700}
 .fin-pos{color:var(--green)}.fin-neg{color:var(--red)}
 @media(max-width:600px){.city-kpi-row{grid-template-columns:repeat(2,1fr)}.tk-cards{grid-template-columns:1fr}}
+
+/* ── Фильтр месяца ──────────────────────────────── */
+.month-bar{
+  display:flex;align-items:center;gap:10px;
+  padding:8px 0 14px;flex-wrap:wrap;
+}
+.month-bar .mlabel{font-size:11px;font-weight:700;text-transform:uppercase;
+  letter-spacing:.06em;color:var(--soft);}
+.month-pills{display:flex;gap:6px;flex-wrap:wrap;}
+.mpill{
+  padding:4px 12px;border-radius:20px;font-size:12px;font-weight:600;
+  cursor:pointer;border:1px solid var(--border);background:var(--card);
+  color:var(--soft);transition:.15s;
+}
+.mpill:hover{border-color:var(--blue);color:var(--blue)}
+.mpill.active{background:var(--blue);color:#fff;border-color:var(--blue)}
+/* ── Режим таблицы ──────────────────────────────── */
+.mode-toggle{display:flex;gap:4px;margin-left:auto}
+.mtbtn{padding:4px 12px;border-radius:6px;font-size:12px;font-weight:600;
+  cursor:pointer;border:1px solid var(--border);background:var(--card);color:var(--soft)}
+.mtbtn.active{background:var(--ink);color:#fff;border-color:var(--ink)}
+/* ── Матрица сегментов ──────────────────────────── */
+.seg-matrix{display:grid;grid-template-columns:repeat(4,1fr);gap:16px;margin-top:4px}
+.seg-col{background:var(--card);border:1px solid var(--border);border-radius:10px;overflow:hidden}
+.seg-col-hdr{
+  padding:10px 14px;font-weight:700;font-size:13px;
+  background:var(--ink);color:#fff;
+}
+.seg-city-row{
+  padding:8px 14px;border-bottom:1px solid var(--border);
+  cursor:pointer;transition:.1s;
+}
+.seg-city-row:hover{background:var(--bg)}
+.seg-city-row:last-child{border:none}
+.seg-city-name{font-size:12.5px;font-weight:600;margin-bottom:2px}
+.seg-city-meta{font-size:11px;color:var(--soft);display:flex;gap:8px}
+.seg-city-meta b{font-weight:700}
+.seg-city-fin{font-family:'JetBrains Mono',monospace;font-size:11px;font-weight:700}
+@media(max-width:900px){.seg-matrix{grid-template-columns:repeat(2,1fr)}}
+@media(max-width:500px){.seg-matrix{grid-template-columns:1fr}}
 </style>
 </head>
 <body>
@@ -169,12 +209,17 @@ tr:last-child td{border-bottom:none}tr:hover td{background:#FAFAFA}
       <div class="tab" onclick="showTab('constructor')">🎛 Конструктор рейтинга</div>
       <div class="tab" onclick="showTab('abc')">ABC/XYZ анализ</div>
       <div class="tab" onclick="showTab('months')">По месяцам</div>
+      <div class="tab" onclick="showTab('segmatrix')">📊 Сегменты × Города</div>
       <div class="tab" onclick="showTab('matrix')">Матрица ТК × Сегмент</div>
       <div class="tab" onclick="showTab('charts')">Графики</div>
     </div>
 
     <!-- ТК -->
     <div class="tab-content active" id="tab-tk">
+      <div class="month-bar" id="tk-month-bar">
+        <span class="mlabel">Месяц:</span>
+        <div class="month-pills" id="tk-pills"></div>
+      </div>
       <div class="tbl-wrap">
         <table id="tk-tbl">
           <thead><tr>
@@ -219,6 +264,14 @@ tr:last-child td{border-bottom:none}tr:hover td{background:#FAFAFA}
 
     <!-- ГОРОДА -->
     <div class="tab-content" id="tab-city">
+      <div class="month-bar" id="city-month-bar">
+        <span class="mlabel">Месяц:</span>
+        <div class="month-pills" id="city-pills"></div>
+        <div class="mode-toggle">
+          <button class="mtbtn active" id="mode-compact" onclick="setMode('compact')">Компакт</button>
+          <button class="mtbtn" id="mode-full" onclick="setMode('full')">Полный</button>
+        </div>
+      </div>
       <div class="filters">
         <input type="text" id="city-search" placeholder="🔍 Поиск по городу..." oninput="filterCities()">
         <select id="city-region-filter" onchange="filterCities()">
@@ -265,6 +318,10 @@ tr:last-child td{border-bottom:none}tr:hover td{background:#FAFAFA}
 
     <!-- РЕГИОНЫ -->
     <div class="tab-content" id="tab-region">
+      <div class="month-bar" id="reg-month-bar">
+        <span class="mlabel">Месяц:</span>
+        <div class="month-pills" id="reg-pills"></div>
+      </div>
       <div class="tbl-wrap">
         <table id="reg-tbl">
           <thead><tr>
@@ -534,6 +591,18 @@ tr:last-child td{border-bottom:none}tr:hover td{background:#FAFAFA}
       </div>
     </div>
 
+    <!-- СЕГМЕНТЫ × ГОРОДА -->
+    <div class="tab-content" id="tab-segmatrix">
+      <div class="month-bar" id="sm-month-bar">
+        <span class="mlabel">Месяц:</span>
+        <div class="month-pills" id="sm-pills"></div>
+      </div>
+      <p style="font-size:12px;color:var(--soft);margin-bottom:14px">
+        Города внутри каждого сегмента по численности населения. Нажмите на город — откроется карточка с деталями по ТК.
+      </p>
+      <div class="seg-matrix" id="seg-matrix-grid"></div>
+    </div>
+
     <!-- МАТРИЦА -->
     <div class="tab-content" id="tab-matrix">
       <p style="font-size:12px;color:var(--soft);margin-bottom:12px">
@@ -653,7 +722,7 @@ function go(file){
 // ── Tabs ────────────────────────────────────────────────────────────
 function showTab(id){
   document.querySelectorAll('.tab').forEach((t,i)=>{
-    const ids=['tk','seg','city','region','constructor','abc','months','matrix','charts'];
+    const ids=['tk','seg','city','region','constructor','abc','months','segmatrix','matrix','charts'];
     t.classList.toggle('active', ids[i]===id);
   });
   document.querySelectorAll('.tab-content').forEach(c=>c.classList.remove('active'));
@@ -661,6 +730,7 @@ function showTab(id){
   if(id==='abc') renderABC();
   if(id==='months') renderMonths();
   if(id==='constructor') { updateConstructor(); }
+  if(id==='segmatrix') { renderSegMatrix(); }
 }
 
 // ── Helpers ─────────────────────────────────────────────────────────
@@ -730,9 +800,9 @@ function render(data, filename, rows){
     <td>${rbar(r.delivery_rate)}</td>
     <td>${badgeR(r.return_rate)}</td>
     <td class="mono">${fmtD(r.срок_полный_ср)}</td>
-    <td class="mono">${fmtD(r.срок_полный_медиана)}</td>
-    <td class="mono">${fmtD(r.срок_в_пути_ср)}</td>
-    <td class="mono">${fmtD(r.срок_ожидания_ср)}</td>
+    <td class="mono" style="${compact?'display:none':''}">${fmtD(r.срок_полный_медиана)}</td>
+    <td class="mono" style="${compact?'display:none':''}">${fmtD(r.срок_в_пути_ср)}</td>
+    <td class="mono" style="${compact?'display:none':''}">${fmtD(r.срок_ожидания_ср)}</td>
     <td class="mono">${fmt(r.avg_check)}</td></tr>`).join('');
 
   // Города — заполняем фильтр регионов
@@ -769,6 +839,12 @@ function render(data, filename, rows){
   // Графики
   renderCharts(data);
 
+  // Сохраняем полные данные и строим pills
+  FULL_DATA = data;
+  buildAllPills(data.available_months || []);
+  // Инициализируем матрицу сегментов
+  renderSegMatrix(data.segment_matrix, data.segments_order);
+
   document.getElementById('dash').style.display='block';
   document.getElementById('upload-sec').style.display='none';
 }
@@ -796,6 +872,12 @@ function filterCities(){
   window._cityDataMap = {};
   rows.forEach(r => { window._cityDataMap[r.city+'_'+r.region] = r; });
 
+  // Компакт режим — скрываем лишние колонки
+  const compact = TABLE_MODE === 'compact';
+  const cityThs = document.querySelectorAll('#tab-city table th');
+  // В компакте скрываем: медиана(7), в пути(8), ожидание ПВЗ(9)
+  [7,8,9].forEach(i => { if(cityThs[i]) cityThs[i].style.display = compact ? 'none' : ''; });
+
   document.getElementById('city-body').innerHTML = rows.map(r=>`<tr
     style="cursor:pointer"
     onclick="openCityCard(window._cityDataMap['${r.city}_${r.region}'])">
@@ -806,9 +888,9 @@ function filterCities(){
     <td>${rbar(r.delivery_rate)}</td>
     <td>${badgeR(r.return_rate)}</td>
     <td class="mono">${fmtD(r.срок_полный_ср)}</td>
-    <td class="mono">${fmtD(r.срок_полный_медиана)}</td>
-    <td class="mono">${fmtD(r.срок_в_пути_ср)}</td>
-    <td class="mono">${fmtD(r.срок_ожидания_ср)}</td>
+    <td class="mono" style="${compact?'display:none':''}">${fmtD(r.срок_полный_медиана)}</td>
+    <td class="mono" style="${compact?'display:none':''}">${fmtD(r.срок_в_пути_ср)}</td>
+    <td class="mono" style="${compact?'display:none':''}">${fmtD(r.срок_ожидания_ср)}</td>
     <td class="mono">${fmt(r.avg_check)}</td>
     <td class="mono">${fmt(r.revenue)}</td>
     <td class="mono">${r.avg_tarif?fmt(r.avg_tarif)+'₽':'—'}</td>
@@ -930,6 +1012,124 @@ function sortTbl(tblId, col){
     return dir?cmp:-cmp;
   });
   rows.forEach(r=>tbl.tBodies[0].appendChild(r));
+}
+
+
+// ── Глобальные данные ────────────────────────────────────────────────
+let FULL_DATA = null;  // полная аналитика после загрузки
+let ACTIVE_MONTHS = {}; // {tabId: month}
+let TABLE_MODE = 'compact'; // compact | full
+
+// ── Month pills ──────────────────────────────────────────────────────
+const PILL_CONFIGS = {
+  'tk':   'tk-pills',
+  'city': 'city-pills',
+  'reg':  'reg-pills',
+  'sm':   'sm-pills',
+};
+
+function buildMonthPills(months, tabId){
+  const containerId = PILL_CONFIGS[tabId];
+  if(!containerId) return;
+  const container = document.getElementById(containerId);
+  if(!container) return;
+
+  const pills = ['Все', ...months].map(m => {
+    const isActive = (!ACTIVE_MONTHS[tabId] && m==='Все') || ACTIVE_MONTHS[tabId]===m;
+    return `<span class="mpill ${isActive?'active':''}"
+      onclick="selectMonth('${tabId}','${m==='Все'?'':m}')">${m==='Все'?'Все':m.slice(5)}</span>`;
+  });
+  container.innerHTML = pills.join('');
+}
+
+function buildAllPills(months){
+  Object.keys(PILL_CONFIGS).forEach(tabId => buildMonthPills(months, tabId));
+}
+
+async function selectMonth(tabId, month){
+  ACTIVE_MONTHS[tabId] = month;
+  // Перестраиваем pills для этой вкладки
+  if(FULL_DATA) buildMonthPills(FULL_DATA.available_months, tabId);
+
+  // Запрашиваем данные с фильтром
+  try{
+    const url = month ? `/api/filter?month=${month}` : '/api/filter';
+    const r = await fetch(url);
+    const j = await r.json();
+    if(!r.ok) return;
+    // Обновляем только нужный раздел
+    updateTabData(tabId, j.analytics);
+  }catch(e){ console.error(e); }
+}
+
+function updateTabData(tabId, data){
+  if(tabId === 'tk')   renderTKTable(data.by_tk);
+  if(tabId === 'city') { CITY_DATA = data.by_city; filterCities(); }
+  if(tabId === 'reg')  renderRegTable(data.by_region);
+  if(tabId === 'sm')   renderSegMatrix(data.segment_matrix, data.segments_order);
+}
+
+function renderRegTable(rows){
+  document.getElementById('reg-body').innerHTML = rows.map(r=>`<tr>
+    <td>${r.region}</td>
+    <td class="mono">${fmt(r.total)}</td>
+    <td><span class="badge bb">${r.share_pct}%</span></td>
+    <td>${rbar(r.delivery_rate)}</td>
+    <td>${badgeR(r.return_rate)}</td>
+    <td class="mono">${fmtD(r.срок_полный_ср)}</td>
+    <td class="mono">${fmtD(r.срок_в_пути_ср)}</td>
+    <td class="mono">${fmtD(r.срок_ожидания_ср)}</td>
+    <td class="mono">${fmt(r.avg_check)}</td></tr>`).join('');
+}
+
+// ── Компакт / Полный режим таблицы городов ──────────────────────────
+const COMPACT_COLS  = [0,1,2,3,4,5,9,10]; // индексы колонок для компакт
+// 0=город,1=регион,2=сегмент,3=заказов,4=%выкупа,5=%возврата,6=срок,7=медиана,8=впути,9=ожидание→убрать в компакте→нет
+// В компакте: Город, Регион, Сегмент, Заказов, %выкупа, %возврата, Ср.чек, Финрез, ROI
+
+function setMode(mode){
+  TABLE_MODE = mode;
+  document.getElementById('mode-compact').classList.toggle('active', mode==='compact');
+  document.getElementById('mode-full').classList.toggle('active', mode==='full');
+  filterCities(); // перерисовываем таблицу
+}
+
+// ── Матрица Сегменты × Города ────────────────────────────────────────
+function renderSegMatrix(matrixData, segOrder){
+  // Если данные не переданы — берём из FULL_DATA
+  const data   = matrixData  || (FULL_DATA && FULL_DATA.segment_matrix)  || {};
+  const segs   = segOrder    || (FULL_DATA && FULL_DATA.segments_order)   || [];
+  const grid   = document.getElementById('seg-matrix-grid');
+  if(!grid) return;
+
+  const SEG_COLORS = {
+    'до 20 тыс.':  '#374151',
+    '20–50 тыс.':  '#1D4ED8',
+    '50–100 тыс.': '#6D28D9',
+    '100 тыс.+':   '#065F46',
+  };
+
+  grid.innerHTML = segs.map(seg => {
+    const cities = data[seg] || [];
+    const color  = SEG_COLORS[seg] || '#374151';
+    const rows   = cities.slice(0, 30).map(c => {
+      const finColor = (c.finrez||0) > 0 ? 'var(--green)' : 'var(--red)';
+      const key      = c.city + '_' + c.region;
+      return `<div class="seg-city-row" onclick="openCityCard(window._cityDataMap && window._cityDataMap['${key}'] || ${JSON.stringify(c)})">
+        <div class="seg-city-name">${c.city}</div>
+        <div class="seg-city-meta">
+          <span><b>${c.delivery_rate||0}%</b> выкуп</span>
+          <span><b>${fmt(c.total)}</b> зак.</span>
+          <span class="seg-city-fin" style="color:${finColor}">${fmt(c.finrez||0)}₽</span>
+        </div>
+      </div>`;
+    }).join('');
+
+    return `<div class="seg-col">
+      <div class="seg-col-hdr" style="background:${color}">${seg} <span style="font-weight:400;font-size:11px">(${cities.length} городов)</span></div>
+      ${rows || '<div style="padding:14px;color:var(--soft);font-size:12px">Нет данных</div>'}
+    </div>`;
+  }).join('');
 }
 
 // ── Конструктор рейтинга ────────────────────────────────────────────
