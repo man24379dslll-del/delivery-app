@@ -812,7 +812,7 @@ function filterCities(){
     <td class="mono">${fmt(r.avg_check)}</td>
     <td class="mono">${fmt(r.revenue)}</td>
     <td class="mono">${r.avg_tarif?fmt(r.avg_tarif)+'₽':'—'}</td>
-    <td class="mono" style="color:${(r.finrez||0)>0?'var(--green)':'var(--red)';font-weight:700}">${fmt(r.finrez||0)}</td>
+    <td class="mono" style="color:${(r.finrez||0)>0?'var(--green)':'var(--red)'};font-weight:700">${fmt(r.finrez||0)}</td>
     <td class="mono" style="font-weight:700">${r.roi||'—'}x</td>
     </tr>`).join('');
   document.getElementById('city-count').textContent = `Показано: ${rows.length} городов`;
