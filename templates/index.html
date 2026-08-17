@@ -1115,7 +1115,7 @@ function renderSegMatrix(matrixData, segOrder){
     const rows   = cities.slice(0, 30).map(c => {
       const finColor = (c.finrez||0) > 0 ? 'var(--green)' : 'var(--red)';
       const key      = c.city + '_' + c.region;
-      return `<div class="seg-city-row" onclick="openCityCard(window._cityDataMap && window._cityDataMap['${key}'] || ${JSON.stringify(c)})">
+      return `<div class="seg-city-row" onclick="openCityByKey('${key.replace(/'/g,'\'')}')" style="cursor:pointer">
         <div class="seg-city-name">${c.city}</div>
         <div class="seg-city-meta">
           <span><b>${c.delivery_rate||0}%</b> выкуп</span>
@@ -1619,6 +1619,12 @@ function renderMonths(){
 function toggleHist(){ alert('История загрузок доступна при настроенном Supabase (см. .env)'); }
 
 // ── Карточка города ──────────────────────────────────────────────────
+function openCityByKey(key){
+  const data = window._cityDataMap && window._cityDataMap[key];
+  if(data){ openCityCard(data); }
+  else { console.warn('City not found:', key); }
+}
+
 function openCityCard(cityData){
   const r = cityData;
   document.getElementById('cm-city').textContent = r.city;
