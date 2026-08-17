@@ -65,8 +65,7 @@ def load_and_parse(file_bytes: bytes) -> pd.DataFrame:
         raise ValueError("Не найдены листы с чеками")
     data = pd.concat(dfs, ignore_index=True)
 
-    # Исключаем "Первичный заказ" — это заготовки без реального движения
-    # Формула % выкупа: Доставлен / Все (без Первичного заказа)
+    # Исключаем "Первичный заказ"
     data = data[data['Статус'] != 'Первичный заказ'].copy()
 
     data['ТК']            = data['Способ получения'].apply(normalize_tk)
@@ -75,6 +74,61 @@ def load_and_parse(file_bytes: bytes) -> pd.DataFrame:
     data['Сумма']         = pd.to_numeric(data['Сумма'], errors='coerce').fillna(0)
     dc = data.get('Стоимость доставки', pd.Series(0, index=data.index))
     data['Стоимость доставки'] = pd.to_numeric(dc, errors='coerce').fillna(0)
+
+    # ── Подтягиваем реальные тарифы из листов ТК (если есть) ──────────
+    data['Номер посылки'] = data['Номер посылки'].astype(str).str.strip() \
+        if 'Номер посылки' in data.columns else ''
+    data['Номер посылки'] = data['Номер посылки'].replace('nan', '')
+    data['тариф_факт'] = np.nan
+
+    # 5Post
+    if '5пост' in xl.sheet_names:
+        try:
+            df5 = pd.read_excel(xl, sheet_name='5пост')
+            col5 = next((c for c in df5.columns if 'услугу по доставке' in c), None)
+            if col5 and '№ Отправления Заказчика' in df5.columns:
+                df5['key'] = df5['№ Отправления Заказчика'].astype(str).str.strip()
+                df5[col5] = pd.to_numeric(df5[col5], errors='coerce')
+                tarif5 = df5.groupby('key')[col5].mean()
+                mask = data['ТК'] == '5Post'
+                data.loc[mask, 'тариф_факт'] = data.loc[mask, 'Номер посылки'].map(tarif5)
+        except Exception as e:
+            print(f'[5Post tariff] {e}')
+
+    # СДЭК
+    if 'сдек' in xl.sheet_names:
+        try:
+            dfc = pd.read_excel(xl, sheet_name='сдек')
+            if 'Суммазауслуги' in dfc.columns and '№ заказа' in dfc.columns:
+                dfc['key'] = dfc['№ заказа'].astype(str).str.strip()
+                dfc['Суммазауслуги'] = pd.to_numeric(dfc['Суммазауслуги'], errors='coerce')
+                tarifc = dfc.groupby('key')['Суммазауслуги'].mean()
+                mask = data['ТК'] == 'СДЭК'
+                data.loc[mask, 'тариф_факт'] = data.loc[mask, 'Номер посылки'].map(tarifc)
+        except Exception as e:
+            print(f'[СДЭК tariff] {e}')
+
+    # Почта
+    if 'почта' in xl.sheet_names:
+        try:
+            dfp = pd.read_excel(xl, sheet_name='почта')
+            if 'TARIF' in dfp.columns and 'Номер посылки' in dfp.columns:
+                dfp['key'] = dfp['Номер посылки'].astype(str).str.strip()
+                # Почта хранит тариф как строку с запятой: "1 140,50" → 1140.50
+                dfp['TARIF_num'] = (dfp['TARIF'].astype(str)
+                    .str.replace(' ', '', regex=False)
+                    .str.replace(',', '.', regex=False))
+                dfp['TARIF_num'] = pd.to_numeric(dfp['TARIF_num'], errors='coerce')
+                tarifp = dfp.groupby('key')['TARIF_num'].mean()
+                mask = data['ТК'] == 'Почта России'
+                data.loc[mask, 'тариф_факт'] = data.loc[mask, 'Номер посылки'].map(tarifp)
+        except Exception as e:
+            print(f'[Почта tariff] {e}')
+
+    # Если тариф_факт не подтянулся — берём Стоимость доставки как запасной
+    data['тариф_факт'] = pd.to_numeric(data['тариф_факт'], errors='coerce')
+    no_tarif = data['тариф_факт'].isna()
+    data.loc[no_tarif, 'тариф_факт'] = data.loc[no_tarif, 'Стоимость доставки'].replace(0, np.nan)
 
     for col in DATE_COLS:
         if col in data.columns:
@@ -99,7 +153,31 @@ def load_and_parse(file_bytes: bytes) -> pd.DataFrame:
         (data['Дата вручения получателю'] - data['Дата прихода']).dt.days,
         np.nan)
 
+
     return data
+
+
+def _finrez(g):
+    """Финансовый результат группы заказов (выручка - тариф туда - тариф обратно)."""
+    del_rows = g[g['Статус_группа'] == 'Доставлен']
+    ret_rows = g[g['Статус_группа'] == 'Возврат']
+    revenue      = float(del_rows['Сумма'].sum())
+    col          = 'тариф_факт' if 'тариф_факт' in g.columns else 'Стоимость доставки'
+    cost_fwd     = float(g[col].dropna().sum())
+    cost_ret     = float(ret_rows[col].dropna().sum())
+    total_cost   = cost_fwd + cost_ret
+    fin          = revenue - total_cost
+    roi          = round(revenue / total_cost, 1) if total_cost > 0 else None
+    avg_t        = g[col].replace(0, np.nan).mean()
+    return {
+        'revenue':    int(revenue),
+        'cost_fwd':   int(cost_fwd),
+        'cost_ret':   int(cost_ret),
+        'total_cost': int(total_cost),
+        'finrez':     int(fin),
+        'roi':        roi,
+        'avg_tarif':  round(float(avg_t), 0) if pd.notna(avg_t) else None,
+    }
 
 def _block(g: pd.DataFrame) -> dict:
     total     = len(g)
@@ -112,7 +190,7 @@ def _block(g: pd.DataFrame) -> dict:
     del_rows = g[g['Статус_группа'] == 'Доставлен']
     avg_chk  = del_rows['Сумма'].mean()
 
-    return {
+    r = {
         'total':          int(total),
         'delivered':      int(delivered),
         'returned':       int(returned),
@@ -130,6 +208,8 @@ def _block(g: pd.DataFrame) -> dict:
         'срок_в_пути_ср':      safe_mean(del_rows['срок_в_пути_дн']),
         'срок_ожидания_ср':    safe_mean(del_rows['срок_ожидания_дн']),
     }
+    r.update(_finrez(g))
+    return r
 
 def calc_summary(data):
     r = _block(data)
@@ -141,7 +221,9 @@ def calc_by_tk(data):
     for tk, g in data.groupby('ТК'):
         r = _block(g); r['tk'] = tk
         r['share_pct'] = round(len(g)/len(data)*100,1)
-        avg_dc = g['Стоимость доставки'].replace(0, np.nan).mean()
+        avg_dc = g['тариф_факт'].replace(0, np.nan).mean() \
+                 if 'тариф_факт' in g.columns \
+                 else g['Стоимость доставки'].replace(0, np.nan).mean()
         r['avg_delivery_cost'] = round(float(avg_dc),2) if not pd.isna(avg_dc) else None
         rows.append(r)
     return sorted(rows, key=lambda x: x['total'], reverse=True)
@@ -191,14 +273,20 @@ def calc_by_city(data, min_orders=20):
             if total < MIN_TK_ORDERS: continue
             delivered = (tg['Статус_группа']=='Доставлен').sum()
             returned  = (tg['Статус_группа']=='Возврат').sum()
-            avg_dc    = tg['Стоимость доставки'].replace(0, np.nan).mean()
-            days      = safe_mean(tg[tg['Статус_группа']=='Доставлен']['срок_полный_дн'])
+            avg_dc = tg['тариф_факт'].replace(0, np.nan).mean() \
+                     if 'тариф_факт' in tg.columns \
+                     else tg['Стоимость доставки'].replace(0, np.nan).mean()
+            days = safe_mean(tg[tg['Статус_группа']=='Доставлен']['срок_полный_дн'])
+            fin  = _finrez(tg)
             tk_data[tk] = {
                 'total':         int(total),
+                'delivered':     int(delivered),
+                'returned':      int(returned),
                 'delivery_rate': round(delivered/total*100, 1) if total else None,
                 'return_rate':   round(returned/total*100, 1)  if total else None,
-                'avg_cost':      round(float(avg_dc), 1) if not pd.isna(avg_dc) else None,
+                'avg_cost':      round(float(avg_dc), 1) if pd.notna(avg_dc) else None,
                 'days':          days,
+                **fin,
             }
 
         r['tk_breakdown'] = tk_data
