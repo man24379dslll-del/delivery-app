@@ -243,12 +243,21 @@ def _finrez(g):
     ret_rows = g[g['Статус_группа'] == 'Возврат']
     revenue      = float(del_rows['Сумма'].sum())
     col          = 'тариф_факт' if 'тариф_факт' in g.columns else 'Стоимость доставки'
-    cost_fwd     = float(g[col].dropna().sum())
-    cost_ret     = float(ret_rows[col].dropna().sum())
+
+    # Средний тариф по тем строкам где он известен
+    tarif_known  = g[col].dropna()
+    tarif_known  = tarif_known[tarif_known > 0]
+    avg_t        = float(tarif_known.mean()) if not tarif_known.empty else 0.0
+
+    # Затраты = все заказы × средний тариф (не только те у кого тариф в данных)
+    cost_fwd     = float(len(g)) * avg_t
+    # Затраты на возврат = кол-во возвратов × средний тариф
+    cost_ret     = float(len(ret_rows)) * avg_t
+
     total_cost   = cost_fwd + cost_ret
     fin          = revenue - total_cost
     roi          = round(revenue / total_cost, 1) if total_cost > 0 else None
-    avg_t        = g[col].replace(0, np.nan).mean()
+
     return {
         'revenue':    int(revenue),
         'cost_fwd':   int(cost_fwd),
@@ -256,7 +265,7 @@ def _finrez(g):
         'total_cost': int(total_cost),
         'finrez':     int(fin),
         'roi':        roi,
-        'avg_tarif':  round(float(avg_t), 0) if pd.notna(avg_t) else None,
+        'avg_tarif':  round(avg_t, 0) if avg_t else None,
     }
 
 def _block(g: pd.DataFrame) -> dict:
