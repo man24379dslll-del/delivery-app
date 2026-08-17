@@ -30,7 +30,22 @@ _cached_filename = None
 @app.get("/", response_class=HTMLResponse)
 async def index():
     with open(os.path.join(BASE_DIR, "templates", "index.html"), encoding="utf-8") as f:
-        return f.read()
+        content = f.read()
+    from fastapi.responses import Response
+    return Response(
+        content=content,
+        media_type="text/html",
+        headers={
+            "Content-Security-Policy": (
+                "default-src 'self'; "
+                "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://cdn.jsdelivr.net https://fonts.googleapis.com; "
+                "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; "
+                "font-src 'self' https://fonts.gstatic.com; "
+                "img-src 'self' data:; "
+                "connect-src 'self';"
+            )
+        }
+    )
 
 
 @app.post("/api/upload")
