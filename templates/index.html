@@ -800,9 +800,9 @@ function render(data, filename, rows){
     <td>${rbar(r.delivery_rate)}</td>
     <td>${badgeR(r.return_rate)}</td>
     <td class="mono">${fmtD(r.срок_полный_ср)}</td>
-    <td class="mono" style="${compact?'display:none':''}">${fmtD(r.срок_полный_медиана)}</td>
-    <td class="mono" style="${compact?'display:none':''}">${fmtD(r.срок_в_пути_ср)}</td>
-    <td class="mono" style="${compact?'display:none':''}">${fmtD(r.срок_ожидания_ср)}</td>
+    <td class="mono" style="${TABLE_MODE==='compact'?'display:none':''}">${fmtD(r.срок_полный_медиана)}</td>
+    <td class="mono" style="${TABLE_MODE==='compact'?'display:none':''}">${fmtD(r.срок_в_пути_ср)}</td>
+    <td class="mono" style="${TABLE_MODE==='compact'?'display:none':''}">${fmtD(r.срок_ожидания_ср)}</td>
     <td class="mono">${fmt(r.avg_check)}</td></tr>`).join('');
 
   // Города — заполняем фильтр регионов
@@ -888,9 +888,9 @@ function filterCities(){
     <td>${rbar(r.delivery_rate)}</td>
     <td>${badgeR(r.return_rate)}</td>
     <td class="mono">${fmtD(r.срок_полный_ср)}</td>
-    <td class="mono" style="${compact?'display:none':''}">${fmtD(r.срок_полный_медиана)}</td>
-    <td class="mono" style="${compact?'display:none':''}">${fmtD(r.срок_в_пути_ср)}</td>
-    <td class="mono" style="${compact?'display:none':''}">${fmtD(r.срок_ожидания_ср)}</td>
+    <td class="mono" style="${TABLE_MODE==='compact'?'display:none':''}">${fmtD(r.срок_полный_медиана)}</td>
+    <td class="mono" style="${TABLE_MODE==='compact'?'display:none':''}">${fmtD(r.срок_в_пути_ср)}</td>
+    <td class="mono" style="${TABLE_MODE==='compact'?'display:none':''}">${fmtD(r.срок_ожидания_ср)}</td>
     <td class="mono">${fmt(r.avg_check)}</td>
     <td class="mono">${fmt(r.revenue)}</td>
     <td class="mono">${r.avg_tarif?fmt(r.avg_tarif)+'₽':'—'}</td>
