@@ -602,22 +602,52 @@ dz.addEventListener('dragover', e=>{e.preventDefault();dz.classList.add('drag')}
 dz.addEventListener('dragleave', ()=>dz.classList.remove('drag'));
 dz.addEventListener('drop', e=>{e.preventDefault();dz.classList.remove('drag');go(e.dataTransfer.files[0])});
 
-async function go(file){
+function go(file){
   if(!file) return;
-  document.getElementById('ustatus').textContent = `Загружаем ${file.name}...`;
+  const sizeMB = (file.size/1024/1024).toFixed(1);
+  const status = document.getElementById('ustatus');
+  status.textContent = `Загружаем ${file.name} (${sizeMB} МБ)...`;
   document.getElementById('loader').style.display='block';
   document.getElementById('dash').style.display='none';
-  const fd=new FormData(); fd.append('file',file);
-  try{
-    const r = await fetch('/api/upload',{method:'POST',body:fd});
-    const j = await r.json();
-    if(!r.ok) throw new Error(j.detail||'Ошибка');
-    render(j.analytics, j.filename, j.rows);
-  }catch(e){
-    document.getElementById('ustatus').textContent='❌ '+e.message;
-  }finally{
+
+  const fd = new FormData();
+  fd.append('file', file);
+  const xhr = new XMLHttpRequest();
+
+  xhr.upload.addEventListener('progress', e=>{
+    if(e.lengthComputable){
+      const pct = Math.round(e.loaded/e.total*100);
+      status.textContent = `Загружено ${pct}% (${sizeMB} МБ) — ждём обработки...`;
+    }
+  });
+
+  xhr.addEventListener('load', ()=>{
+    try{
+      status.textContent = 'Обрабатываем данные...';
+      const j = JSON.parse(xhr.responseText);
+      if(xhr.status !== 200) throw new Error(j.detail||'Ошибка сервера '+xhr.status);
+      render(j.analytics, j.filename, j.rows);
+      status.textContent = '';
+    }catch(e){
+      status.textContent = '❌ '+e.message;
+    }finally{
+      document.getElementById('loader').style.display='none';
+    }
+  });
+
+  xhr.addEventListener('error', ()=>{
+    status.textContent = '❌ Ошибка сети. Попробуйте ещё раз.';
     document.getElementById('loader').style.display='none';
-  }
+  });
+
+  xhr.timeout = 300000; // 5 минут
+  xhr.addEventListener('timeout', ()=>{
+    status.textContent = '❌ Таймаут (5 мин). Файл очень большой.';
+    document.getElementById('loader').style.display='none';
+  });
+
+  xhr.open('POST', '/api/upload');
+  xhr.send(fd);
 }
 
 // ── Tabs ────────────────────────────────────────────────────────────
