@@ -237,8 +237,8 @@ tbody tr.clickable{cursor:pointer}
 .seg-city-row:hover{background:var(--bg)}
 .seg-city-row:last-child{border-bottom:none}
 .scr-name{font-size:12.5px;font-weight:600;margin-bottom:3px}
-.scr-meta{display:flex;gap:8px;font-size:11px;color:var(--soft)}
-.scr-fin{font-family:var(--mono);font-size:11px;font-weight:700}
+.scr-meta{display:flex;flex-wrap:wrap;gap:4px 8px;font-size:11px;color:var(--soft)}
+.scr-fin{font-family:var(--mono);font-size:11px;font-weight:700;white-space:nowrap}
 
 /* ── CITY MODAL ──────────────────────────────────────────────── */
 .modal-overlay{
@@ -917,20 +917,36 @@ function filterByMonth(month, el){
   document.getElementById('topbar-meta').textContent = `Загружаем данные за ${month}...`;
   fetch(`/api/filter?month=${month}`)
     .then(r=>r.json())
-    .then(data=>{
-      if(data.error){ console.error(data.error); return; }
+    .then(resp=>{
+      if(resp.error){ console.error(resp.error); return; }
+      const data = resp.analytics;
+      if(!data){ console.error('No analytics in response'); return; }
       renderTK(data.by_tk);
       CITY_DATA = data.by_city || [];
+      // Обновляем _cityDataMap
+      window._cityDataMap={};
+      CITY_DATA.forEach(r=>{window._cityDataMap[r.city+'_'+r.region]=r;});
       renderCities();
       renderRegions(data.by_region);
       renderMatrix(data.tk_by_segment, data.segments_order);
       renderSegments();
       // Обновляем hero KPI
       const s = data.summary;
-      document.getElementById('h-finrez').textContent = fmt(s.finrez||0)+'₽';
-      document.getElementById('topbar-meta').textContent = `${month} · ${fmt(s.total)} заказов`;
+      if(s){
+        document.getElementById('h-finrez').textContent = fmt(s.finrez||0)+'₽';
+        document.getElementById('h-finrez-sub').textContent = `выручка ${fmtM(s.total_revenue)} − затраты ${fmtM(s.total_cost)}`;
+        document.getElementById('h-stats').innerHTML = [
+          {l:'% выкупа',v:(s.delivery_rate||0)+'%',cls:(s.delivery_rate||0)>=50?'pos':'neg'},
+          {l:'ROI',v:(s.roi||0)+'x',cls:(s.roi||0)>=20?'pos':'amb'},
+          {l:'Доставлено',v:fmt(s.delivered),cls:''},
+          {l:'Ср. срок',v:fmtD(s.срок_полный_ср)+'д',cls:''},
+          {l:'Ср. чек',v:fmt(s.avg_check)+'₽',cls:''},
+          {l:'В пути',v:fmt(s.in_transit),cls:'amb'},
+        ].map(k=>`<div class="khs"><div class="lbl">${k.l}</div><div class="val ${k.cls}">${k.v}</div></div>`).join('');
+      }
+      document.getElementById('topbar-meta').textContent = `${month} · ${fmt((s||{}).total||0)} заказов`;
     })
-    .catch(e=>{ console.error(e); document.getElementById('topbar-meta').textContent = 'Ошибка загрузки'; });
+    .catch(e=>{ console.error(e); document.getElementById('topbar-meta').textContent = 'Ошибка: '+e.message; });
 }
 
 // ══════════════════════════════════════════════════════════════
