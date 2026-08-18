@@ -1347,7 +1347,7 @@ function renderConstructor(){
     if(th) th.style.display=show?'':'none';
   });
 
-  document.getElementById('constructor-body').innerHTML=rows.map(r=>`<tr class="clickable" onclick="openCityByKey('${(r.city+'_'+r.region).replace(/'/g,&quot;\\\'&quot;)}')">
+  document.getElementById('constructor-body').innerHTML=rows.map(r=>`<tr class="clickable" onclick="openCityByKey('${(r.city+'_'+r.region).replace(/'/g,"\\\'")}')">
     <td><strong>${r.city}</strong></td>
     <td style="color:var(--soft);font-size:12px">${r.region}</td>
     <td>${segBadge(r.segment)}</td>
