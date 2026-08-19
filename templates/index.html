@@ -1015,6 +1015,8 @@ function filterByMonth(month, el){
           {l:'Ср. чек',v:fmt(s.avg_check)+'₽',cls:''},
           {l:'В пути',v:fmt(s.in_transit),cls:'amb'},
         ].map(k=>`<div class="khs"><div class="lbl">${k.l}</div><div class="val ${k.cls}">${k.v}</div></div>`).join('');
+        // Обновляем карточки KPI внизу
+        renderKPI(s);
       }
       document.getElementById('topbar-meta').textContent = `${month} · ${fmt((s||{}).total||0)} заказов`;
     })
@@ -1024,6 +1026,34 @@ function filterByMonth(month, el){
 // ══════════════════════════════════════════════════════════════
 // OVERVIEW
 // ══════════════════════════════════════════════════════════════
+function renderKPI(s){
+  const card = (l,v,sub,cls='')=>`<div class="kpi-card ${cls}">
+    <div class="kpi-lbl">${l}</div>
+    <div class="kpi-val">${v}</div>
+    <div class="kpi-sub">${sub}</div>
+  </div>`;
+  const inPct  = s.total ? ((s.in_transit||0)/s.total*100).toFixed(1)+'%' : '—';
+  const pbPct  = s.total ? ((s.problematic||0)/s.total*100).toFixed(1)+'%' : '—';
+  document.getElementById('kpi-fin').innerHTML = [
+    card('Выручка',   fmtM(s.total_revenue||0),  'от доставленных',       'c-blue'),
+    card('Затраты',   fmtM(s.total_cost||0),      'тариф туда + обратно',  'c-amber'),
+    card('Финрез',    fmtM(s.finrez||0),           'выручка − затраты',     'c-green'),
+    card('ROI',       (s.roi||0)+'x',              'выр. / затр.',          'c-blue'),
+    card('Ср. чек',   fmt(s.avg_check||0)+'₽',    'доставленных',          ''),
+    card('Ср. тариф', s.avg_tarif?fmt(s.avg_tarif)+'₽':'—','средний по ТК',''),
+  ].join('');
+  document.getElementById('kpi-ops').innerHTML = [
+    card('Всего заказов', fmt(s.total||0),         'уникальных ID',                    'c-blue'),
+    card('Доставлено',    fmt(s.delivered||0),      (s.delivery_rate||0)+'% от всех',  'c-green'),
+    card('Возвраты',      fmt(s.returned||0),       (s.return_rate||0)+'%',            'c-red'),
+    card('Отмены',        fmt(s.cancelled||0),      (s.cancel_rate||0)+'%',            'c-amber'),
+    card('Проблемные',    fmt(s.problematic||0),    pbPct,                             ''),
+    card('В пути',        fmt(s.in_transit||0),     inPct+' · не закрыты',            'c-amber'),
+    card('% выкупа',      (s.delivery_rate||0)+'%','доставлен / все заказы',          'c-green'),
+    card('Ср. срок',      fmtD(s.срок_полный_ср)+'д','медиана '+fmtD(s.срок_полный_медиана)+'д',''),
+  ].join('');
+}
+
 function renderOverview(data){
   const s = data.summary;
 
@@ -1050,30 +1080,7 @@ function renderOverview(data){
     <div class="kpi-sub">${sub}</div>
   </div>`;
 
-  // ФИНАНСОВЫЕ — слева
-  const finCards = [
-    card('Выручка',      fmtM(s.total_revenue||0),  'от доставленных',        'c-blue'),
-    card('Затраты',      fmtM(s.total_cost||0),      'тариф туда + обратно',   'c-amber'),
-    card('Финрез',       fmtM(s.finrez||0),          'выручка − затраты',      'c-green'),
-    card('ROI',          (s.roi||0)+'x',             'выр. / затр.',           'c-blue'),
-    card('Ср. чек',      fmt(s.avg_check)+'₽',       'доставленных',           ''),
-    card('Ср. тариф',    s.avg_tarif?fmt(s.avg_tarif)+'₽':'—', 'средний по ТК',''),
-  ];
-  document.getElementById('kpi-fin').innerHTML = finCards.join('');
-
-  // ОПЕРАЦИОННЫЕ — справа
-  const total = s.total||1;
-  const opsCards = [
-    card('Всего заказов',  fmt(s.total),              'уникальных ID',          'c-blue'),
-    card('Доставлено',     fmt(s.delivered),           (s.delivery_rate||0)+'% от всех', 'c-green'),
-    card('Возвраты',       fmt(s.returned),            (s.return_rate||0)+'%',   'c-red'),
-    card('Отмены',         fmt(s.cancelled),           (s.cancel_rate||0)+'%',   'c-amber'),
-    card('Проблемные',     fmt(s.problematic||0),      s.total?((s.problematic||0)/s.total*100).toFixed(1)+'%':'—', ''),
-    card('В пути',         fmt(s.in_transit),          'не закрыты',             'c-amber'),
-    card('% выкупа',       (s.delivery_rate||0)+'%',  'вручено / все заказы',   'c-green'),
-    card('Ср. срок',       fmtD(s.срок_полный_ср)+'д',  'медиана '+fmtD(s.срок_полный_медиана)+'д', ''),
-  ];
-  document.getElementById('kpi-ops').innerHTML = opsCards.join('');
+  renderKPI(s);
 
   // Trend chart
   if(charts.overviewTrend) charts.overviewTrend.destroy();
