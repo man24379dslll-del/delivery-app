@@ -279,6 +279,26 @@ def _block(g: pd.DataFrame) -> dict:
     del_rows = g[g['Статус_группа'] == 'Доставлен']
     avg_chk  = del_rows['Сумма'].mean()
 
+    # % выкупа = Дата вручения / Дата ухода с почты
+    # Для Курьера (стационар/свой) — нет даты ухода, fallback на delivered/total
+    col_ukhod  = 'Дата ухода с почты'
+    col_vruch  = 'Дата вручения получателю'
+    if col_ukhod in g.columns:
+        sent     = int(g[col_ukhod].notna().sum())
+        vrucheno = int((g[col_ukhod].notna() & g[col_vruch].notna()).sum()) if col_vruch in g.columns else 0
+        vozvrat_sent = int((g[col_ukhod].notna() & (g['Статус_группа']=='Возврат')).sum())
+        if sent > 0:
+            delivery_rate = round(vrucheno / sent * 100, 1)
+            return_rate   = round(vozvrat_sent / sent * 100, 1)
+        else:
+            # fallback для Курьера (стационар/свой)
+            delivery_rate = round(delivered / total * 100, 1) if total else None
+            return_rate   = round(returned  / total * 100, 1) if total else None
+    else:
+        sent = 0; vrucheno = 0
+        delivery_rate = round(delivered / total * 100, 1) if total else None
+        return_rate   = round(returned  / total * 100, 1) if total else None
+
     r = {
         'total':          int(total),
         'delivered':      int(delivered),
@@ -286,9 +306,12 @@ def _block(g: pd.DataFrame) -> dict:
         'cancelled':      int(cancelled),
         'in_transit':     int(in_transit),
         'final':          int(final),
-        # % выкупа = Доставлен / Все (без Первичного заказа)
-        'delivery_rate':  round(delivered/total*100, 1) if total else None,
-        'return_rate':    round(returned/total*100, 1)  if total else None,
+        'sent':           sent,
+        'vrucheno':       vrucheno,
+        'problematic':    int((g['Статус'] == 'Проблемный заказ').sum()) if 'Статус' in g.columns else 0,
+        # % выкупа = Дата вручения / Дата ухода с почты
+        'delivery_rate':  delivery_rate,
+        'return_rate':    return_rate,
         'cancel_rate':    round(cancelled/total*100, 1) if total else None,
         'avg_check':      int(avg_chk) if not pd.isna(avg_chk) else 0,
         'revenue':        int(del_rows['Сумма'].sum()),

@@ -406,6 +406,18 @@ tbody tr.clickable{cursor:pointer}
         <div class="kpi-hero-stats" id="h-stats"></div>
       </div>
       <div class="kpi-grid" id="kpi-grid"></div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:20px">
+        <!-- Финансовые показатели -->
+        <div>
+          <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--soft);margin-bottom:10px">💰 Финансовые показатели</div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px" id="kpi-fin"></div>
+        </div>
+        <!-- Операционные показатели -->
+        <div>
+          <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--soft);margin-bottom:10px">📦 Заказы и статусы</div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px" id="kpi-ops"></div>
+        </div>
+      </div>
 
       <div class="sec-hdr"><h2>Динамика по месяцам</h2></div>
       <div class="chart-card" style="margin-bottom:20px">
@@ -971,27 +983,37 @@ function renderOverview(data){
     `<div class="khs"><div class="lbl">${k.l}</div><div class="val ${k.cls}">${k.v}</div></div>`
   ).join('');
 
-  // KPI cards
-  const cards = [
-    {l:'Всего заказов',  v:fmt(s.total),            sub:'в файле',          cls:'c-blue'},
-    {l:'Финальных',      v:fmt(s.final),            sub:'без заказов в пути',cls:''},
-    {l:'% выкупа',       v:(s.delivery_rate||0)+'%',sub:'доставлен / всего', cls:'c-green'},
-    {l:'% возврата',     v:(s.return_rate||0)+'%',  sub:'от всех заказов',   cls:'c-red'},
-    {l:'Выручка',        v:fmtM(s.total_revenue),   sub:'от доставленных',   cls:'c-blue'},
-    {l:'Затраты',        v:fmtM(s.total_cost||0),   sub:'тариф туда+обратно',cls:'c-amber'},
-    {l:'Финрез',         v:fmtM(s.finrez||0),       sub:'выручка−затраты',   cls:'c-green'},
-    {l:'ROI',            v:(s.roi||0)+'x',           sub:'выр./затр.',        cls:'c-blue'},
-    {l:'Ср. срок',       v:fmtD(s.срок_полный_ср)+'д',sub:'медиана '+fmtD(s.срок_полный_медиана)+'д',cls:''},
-    {l:'Ср. в пути',     v:fmtD(s.срок_в_пути_ср)+'д',  sub:'склад→ПВЗ',   cls:''},
-    {l:'Ср. чек',        v:fmt(s.avg_check)+'₽',    sub:'доставленных',      cls:''},
-    {l:'В пути',         v:fmt(s.in_transit),        sub:'ещё не закрыты',   cls:'c-amber'},
+  // KPI cards — две колонки
+  const card = (l,v,sub,cls='')=>`<div class="kpi-card ${cls}">
+    <div class="kpi-lbl">${l}</div>
+    <div class="kpi-val">${v}</div>
+    <div class="kpi-sub">${sub}</div>
+  </div>`;
+
+  // ФИНАНСОВЫЕ — слева
+  const finCards = [
+    card('Выручка',      fmtM(s.total_revenue||0),  'от доставленных',        'c-blue'),
+    card('Затраты',      fmtM(s.total_cost||0),      'тариф туда + обратно',   'c-amber'),
+    card('Финрез',       fmtM(s.finrez||0),          'выручка − затраты',      'c-green'),
+    card('ROI',          (s.roi||0)+'x',             'выр. / затр.',           'c-blue'),
+    card('Ср. чек',      fmt(s.avg_check)+'₽',       'доставленных',           ''),
+    card('Ср. тариф',    s.avg_tarif?fmt(s.avg_tarif)+'₽':'—', 'средний по ТК',''),
   ];
-  document.getElementById('kpi-grid').innerHTML = cards.map(k=>`
-    <div class="kpi-card ${k.cls}">
-      <div class="kpi-lbl">${k.l}</div>
-      <div class="kpi-val">${k.v}</div>
-      <div class="kpi-sub">${k.sub}</div>
-    </div>`).join('');
+  document.getElementById('kpi-fin').innerHTML = finCards.join('');
+
+  // ОПЕРАЦИОННЫЕ — справа
+  const total = s.total||1;
+  const opsCards = [
+    card('Всего заказов',  fmt(s.total),              'уникальных ID',          'c-blue'),
+    card('Доставлено',     fmt(s.delivered),           (s.delivery_rate||0)+'% от всех', 'c-green'),
+    card('Возвраты',       fmt(s.returned),            (s.return_rate||0)+'%',   'c-red'),
+    card('Отмены',         fmt(s.cancelled),           (s.cancel_rate||0)+'%',   'c-amber'),
+    card('Проблемные',     fmt(s.problematic||0),      s.total?((s.problematic||0)/s.total*100).toFixed(1)+'%':'—', ''),
+    card('В пути',         fmt(s.in_transit),          'не закрыты',             'c-amber'),
+    card('% выкупа',       (s.delivery_rate||0)+'%',  'вручено / все заказы',   'c-green'),
+    card('Ср. срок',       fmtD(s.срок_полный_ср)+'д',  'медиана '+fmtD(s.срок_полный_медиана)+'д', ''),
+  ];
+  document.getElementById('kpi-ops').innerHTML = opsCards.join('');
 
   // Trend chart
   if(charts.overviewTrend) charts.overviewTrend.destroy();
