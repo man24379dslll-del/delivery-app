@@ -1726,18 +1726,10 @@ function tlInit(data){
     });
   });
 
-  // Тепловая карта — топ-20 городов
-  TL_TOP_CITIES = (data.by_city||[]).sort((a,b)=>b.total-a.total).slice(0,20).map(c=>c.city);
-  TL_HEATMAP_DATA = {};
-
-  // Строим месячные данные по городам из тренда по ТК (упрощённо — из общего тренда)
-  TL_TOP_CITIES.forEach(city=>{
-    TL_HEATMAP_DATA[city] = {};
-    TL_MONTHS.forEach(m=>{
-      const cityData = (data.by_city||[]).find(c=>c.city===city);
-      if(cityData) TL_HEATMAP_DATA[city][m] = cityData.delivery_rate;
-    });
-  });
+  // Тепловая карта — реальные данные по месяцам из city_heatmap
+  const heatmapData = data.city_heatmap || {};
+  TL_TOP_CITIES = Object.keys(heatmapData);
+  TL_HEATMAP_DATA = heatmapData;
 
   // Рендерим таблетки месяцев
   const bar = document.getElementById('tl-months-bar');

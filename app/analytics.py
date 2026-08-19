@@ -410,6 +410,28 @@ def calc_trend(data):
         rows.append(r)
     return rows
 
+def calc_city_heatmap(data, top_n=20):
+    """% выкупа по топ-N городам за каждый месяц — для тепловой карты таймлапса."""
+    if 'Дата создания' not in data.columns: return {}
+    d = data.dropna(subset=['Дата создания']).copy()
+    d['month'] = d['Дата создания'].dt.to_period('M').astype(str)
+
+    # Топ городов по общему объёму
+    top_cities = (d.groupby('Населенный пункт').size()
+                   .sort_values(ascending=False)
+                   .head(top_n).index.tolist())
+
+    result = {}  # city -> {month -> delivery_rate}
+    for city in top_cities:
+        result[city] = {}
+        city_df = d[d['Населенный пункт'] == city]
+        for month, g in city_df.groupby('month'):
+            total = len(g)
+            delivered = (g['Статус_группа'] == 'Доставлен').sum()
+            result[city][month] = round(delivered/total*100, 1) if total >= 5 else None
+
+    return result
+
 def calc_trend_by_tk(data):
     """Тренд по месяцам отдельно для каждой ТК."""
     if 'Дата создания' not in data.columns: return {}
@@ -481,6 +503,7 @@ def run_full_analytics(data: pd.DataFrame, month: str = '') -> dict:
         'by_region':       calc_by_region(filtered),
         'trend':           calc_trend(data),       # тренд всегда по всем данным
         'trend_by_tk':     calc_trend_by_tk(data), # тренд всегда по всем данным
+        'city_heatmap':    calc_city_heatmap(data, top_n=20),
         'segment_matrix':  calc_segment_matrix(filtered),
         'segments_order':  SEGMENTS_ORDER,
         'available_months': get_available_months(data),
