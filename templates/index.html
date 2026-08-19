@@ -352,6 +352,9 @@ tbody tr.clickable{cursor:pointer}
   <div class="nav-item" onclick="showPage('charts')" id="nav-charts">
     <span class="ni">📈</span><span class="nl">Графики</span>
   </div>
+  <div class="nav-item" onclick="showPage('timelapse')" id="nav-timelapse">
+    <span class="ni">▶️</span><span class="nl">Таймлапс</span>
+  </div>
 
   <div class="sidebar-bottom">
     <label class="upload-btn-side" for="file-input">
@@ -735,6 +738,61 @@ tbody tr.clickable{cursor:pointer}
       </div>
     </div>
 
+    <!-- ── TIMELAPSE PAGE ──────────────────────────────────── -->
+    <div class="page" id="page-timelapse">
+      <div class="sec-hdr"><h2>Таймлапс</h2><span class="sec-sub">Динамика по месяцам в реальном времени</span></div>
+
+      <div style="background:var(--navy);border-radius:14px;padding:20px 24px;margin-bottom:20px;display:flex;align-items:center;gap:20px;flex-wrap:wrap">
+        <div style="display:flex;gap:10px;align-items:center">
+          <button id="tl-btn-play" onclick="tlPlay()" style="background:var(--blue);color:#fff;border:none;border-radius:8px;padding:10px 20px;font-size:14px;font-weight:700;cursor:pointer">▶ Старт</button>
+          <button onclick="tlReset()" style="background:rgba(255,255,255,.1);color:#fff;border:none;border-radius:8px;padding:10px 16px;font-size:14px;cursor:pointer">⏮ Сначала</button>
+        </div>
+        <div style="display:flex;align-items:center;gap:10px">
+          <span style="font-size:12px;color:#64748B">Скорость:</span>
+          <select id="tl-speed" style="background:rgba(255,255,255,.1);color:#fff;border:1px solid rgba(255,255,255,.2);border-radius:6px;padding:6px 10px;font-size:12px">
+            <option value="2000">Медленно (2с)</option>
+            <option value="1200" selected>Нормально (1.2с)</option>
+            <option value="700">Быстро (0.7с)</option>
+          </select>
+        </div>
+        <div style="display:flex;align-items:center;gap:10px">
+          <span style="font-size:12px;color:#64748B">Метрика:</span>
+          <select id="tl-metric" onchange="tlRenderFrame()" style="background:rgba(255,255,255,.1);color:#fff;border:1px solid rgba(255,255,255,.2);border-radius:6px;padding:6px 10px;font-size:12px">
+            <option value="delivery_rate">% выкупа</option>
+            <option value="total">Объём заказов</option>
+            <option value="finrez">Финрез, ₽</option>
+            <option value="return_rate">% возврата</option>
+          </select>
+        </div>
+        <div style="margin-left:auto;text-align:center">
+          <div style="font-size:32px;font-weight:800;color:#F8FAFC;font-family:monospace" id="tl-month-label">—</div>
+          <div style="font-size:11px;color:#475569">текущий месяц</div>
+        </div>
+      </div>
+
+      <div style="display:flex;gap:6px;margin-bottom:20px;flex-wrap:wrap" id="tl-months-bar"></div>
+
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:16px">
+        <div style="background:var(--card);border:1px solid var(--border);border-radius:12px;padding:20px">
+          <div style="font-size:13px;font-weight:700;margin-bottom:16px;display:flex;justify-content:space-between;align-items:center">
+            <span>🏁 Гонка ТК</span>
+            <span style="font-size:11px;color:var(--soft)" id="tl-race-label">% выкупа</span>
+          </div>
+          <div id="tl-race" style="display:flex;flex-direction:column;gap:10px"></div>
+        </div>
+        <div style="background:var(--card);border:1px solid var(--border);border-radius:12px;padding:20px">
+          <div style="font-size:13px;font-weight:700;margin-bottom:14px">📊 KPI месяца</div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px" id="tl-kpi"></div>
+        </div>
+      </div>
+
+      <div style="background:var(--card);border:1px solid var(--border);border-radius:12px;padding:20px">
+        <div style="font-size:13px;font-weight:700;margin-bottom:4px">🌡 Тепловая карта — % выкупа · города × месяцы</div>
+        <div style="font-size:11px;color:var(--soft);margin-bottom:14px">Топ-20 городов · текущий месяц подсвечен</div>
+        <div style="overflow-x:auto"><table id="tl-heatmap" style="border-collapse:collapse;width:100%;font-size:11px"></table></div>
+      </div>
+    </div>
+
   </div><!-- /content -->
 </main>
 
@@ -782,7 +840,8 @@ function showPage(id){
   const titles = {
     overview:'Обзор', tk:'По ТК', cities:'По городам', regions:'По регионам',
     segments:'Сегменты × Города', constructor:'Конструктор рейтинга',
-    abc:'ABC/XYZ анализ', months:'По месяцам', matrix:'Матрица ТК × Сегмент', charts:'Графики'
+    abc:'ABC/XYZ анализ', months:'По месяцам', matrix:'Матрица ТК × Сегмент',
+    charts:'Графики', timelapse:'Таймлапс — динамика по месяцам'
   };
   document.getElementById('topbar-title').textContent = titles[id]||id;
 
@@ -790,6 +849,7 @@ function showPage(id){
   if(id==='months') renderMonths();
   if(id==='constructor') updateConstructor();
   if(id==='segments') renderSegments();
+  if(id==='timelapse' && ALL_DATA) tlInit(ALL_DATA);
 }
 
 // ══════════════════════════════════════════════════════════════
@@ -1623,7 +1683,208 @@ function closeCityCard(){
   document.getElementById('city-overlay').classList.remove('open');
   document.body.style.overflow='';
 }
-document.addEventListener('keydown',e=>{if(e.key==='Escape')closeCityCard();});
+
+// ══════════════════════════════════════════════════════════════
+// ТАЙМЛАПС
+// ══════════════════════════════════════════════════════════════
+let TL_MONTHS = [];
+let TL_IDX    = 0;
+let TL_TIMER  = null;
+let TL_PLAYING = false;
+let TL_BY_MONTH = {};  // month -> {summary, by_tk}
+let TL_HEATMAP_DATA = {}; // city -> {month -> delivery_rate}
+let TL_TOP_CITIES = [];
+
+const TK_COLORS = {
+  '5Post': '#10B981', 'СДЭК': '#2563EB',
+  'Почта России': '#F59E0B', 'Курьер (свой)': '#7C3AED',
+  'Курьер (стационар)': '#F43F5E'
+};
+
+function tlInit(data){
+  TL_MONTHS = (data.trend||[]).map(r=>r.month).sort();
+  TL_IDX = 0;
+
+  // Кэшируем summary и by_tk из тренда
+  TL_BY_MONTH = {};
+  (data.trend||[]).forEach(r=>{ TL_BY_MONTH[r.month] = {summary: r}; });
+
+  // Данные по ТК из trend_by_tk
+  const byTK = data.trend_by_tk || {};
+  Object.entries(byTK).forEach(([tk, months])=>{
+    months.forEach(r=>{
+      if(!TL_BY_MONTH[r.month]) TL_BY_MONTH[r.month] = {};
+      if(!TL_BY_MONTH[r.month].by_tk) TL_BY_MONTH[r.month].by_tk = {};
+      TL_BY_MONTH[r.month].by_tk[tk] = r;
+    });
+  });
+
+  // Тепловая карта — топ-20 городов
+  TL_TOP_CITIES = (data.by_city||[]).sort((a,b)=>b.total-a.total).slice(0,20).map(c=>c.city);
+  TL_HEATMAP_DATA = {};
+
+  // Строим месячные данные по городам из тренда по ТК (упрощённо — из общего тренда)
+  TL_TOP_CITIES.forEach(city=>{
+    TL_HEATMAP_DATA[city] = {};
+    TL_MONTHS.forEach(m=>{
+      const cityData = (data.by_city||[]).find(c=>c.city===city);
+      if(cityData) TL_HEATMAP_DATA[city][m] = cityData.delivery_rate;
+    });
+  });
+
+  // Рендерим таблетки месяцев
+  const bar = document.getElementById('tl-months-bar');
+  bar.innerHTML = TL_MONTHS.map((m,i)=>`
+    <div id="tlm-${i}" onclick="tlGoTo(${i})" style="
+      padding:5px 12px;border-radius:20px;font-size:12px;font-weight:600;
+      cursor:pointer;border:1.5px solid var(--border);color:var(--soft);
+      background:var(--card);transition:all .2s">
+      ${m.replace('2026-','')}
+    </div>`).join('');
+
+  tlRenderHeatmap();
+  tlGoTo(0);
+}
+
+function tlGoTo(idx){
+  TL_IDX = Math.max(0, Math.min(idx, TL_MONTHS.length-1));
+  // Обновляем таблетки
+  document.querySelectorAll('[id^="tlm-"]').forEach((el,i)=>{
+    el.style.background  = i===TL_IDX ? 'var(--blue)' : 'var(--card)';
+    el.style.color       = i===TL_IDX ? '#fff' : 'var(--soft)';
+    el.style.borderColor = i===TL_IDX ? 'var(--blue)' : 'var(--border)';
+  });
+  tlRenderFrame();
+}
+
+function tlRenderFrame(){
+  const month = TL_MONTHS[TL_IDX];
+  if(!month) return;
+  document.getElementById('tl-month-label').textContent = month.replace('2026-','Месяц ');
+
+  const md = TL_BY_MONTH[month] || {};
+  const s  = md.summary || {};
+  const tk = md.by_tk   || {};
+  const metric = document.getElementById('tl-metric').value;
+
+  // KPI карточки месяца
+  const kcard = (l,v,cls='')=>`<div class="kpi-card ${cls}" style="padding:12px 14px">
+    <div class="kpi-lbl" style="font-size:9px">${l}</div>
+    <div class="kpi-val" style="font-size:18px">${v}</div>
+  </div>`;
+  document.getElementById('tl-kpi').innerHTML = [
+    kcard('Заказов',       fmt(s.total||0),                 'c-blue'),
+    kcard('% выкупа',      (s.delivery_rate||0)+'%',        (s.delivery_rate||0)>=50?'c-green':'c-red'),
+    kcard('Доставлено',    fmt(s.delivered||0),              'c-green'),
+    kcard('% возврата',    (s.return_rate||0)+'%',          'c-red'),
+    kcard('Финрез',        fmtM(s.finrez||0),               'c-green'),
+    kcard('ROI',           (s.roi||0)+'x',                  'c-blue'),
+    kcard('Ср. чек',       fmt(s.avg_check||0)+'₽',         ''),
+    kcard('В пути',        fmt(s.in_transit||0),            'c-amber'),
+  ].join('');
+
+  // Гонка ТК
+  const metricLabels = {delivery_rate:'% выкупа',total:'Заказов',finrez:'Финрез',return_rate:'% возврата'};
+  document.getElementById('tl-race-label').textContent = metricLabels[metric]||metric;
+
+  const tkList = Object.entries(tk).map(([name,d])=>({name, val: d[metric]||0}))
+    .filter(x=>x.val>0)
+    .sort((a,b)=>b.val-a.val);
+
+  const maxVal = tkList.length ? Math.max(...tkList.map(x=>x.val)) : 1;
+
+  document.getElementById('tl-race').innerHTML = tkList.map((t,i)=>{
+    const pct  = Math.round(t.val / maxVal * 100);
+    const color= TK_COLORS[t.name]||'#64748B';
+    const disp = metric==='delivery_rate'||metric==='return_rate'
+      ? t.val+'%' : metric==='finrez' ? fmtM(t.val) : fmt(t.val);
+    const medal = ['🥇','🥈','🥉'][i]||'';
+    return `<div>
+      <div style="display:flex;justify-content:space-between;margin-bottom:4px">
+        <span style="font-size:12px;font-weight:600">${medal} ${t.name}</span>
+        <span style="font-family:monospace;font-size:12px;font-weight:700;color:${color}">${disp}</span>
+      </div>
+      <div style="background:var(--border);border-radius:4px;height:10px;overflow:hidden">
+        <div style="height:100%;background:${color};width:${pct}%;border-radius:4px;transition:width .6s ease"></div>
+      </div>
+    </div>`;
+  }).join('');
+
+  // Подсветка колонки тепловой карты
+  TL_MONTHS.forEach((m,i)=>{
+    const cells = document.querySelectorAll(`.tl-col-${i}`);
+    cells.forEach(c=>{
+      c.style.outline = i===TL_IDX ? '2px solid var(--blue)' : 'none';
+      c.style.opacity = i===TL_IDX ? '1' : '.75';
+    });
+    const th = document.querySelector(`#tl-hm-th-${i}`);
+    if(th){
+      th.style.background = i===TL_IDX ? 'var(--blue)' : 'var(--navy)';
+      th.style.color = '#fff';
+    }
+  });
+}
+
+function tlRenderHeatmap(){
+  if(!TL_TOP_CITIES.length) return;
+  const heat = v=>{
+    if(v==null) return '#F1F5F9';
+    if(v>=60) return '#6EE7B7';
+    if(v>=50) return '#A7F3D0';
+    if(v>=40) return '#FEF9C3';
+    if(v>=30) return '#FED7AA';
+    return '#FECACA';
+  };
+  const fc = v=>v==null?'#94A3B8':v>=50?'#065F46':'#7F1D1D';
+
+  let html = '<thead><tr><th style="background:var(--navy);color:#fff;padding:8px 12px;text-align:left;min-width:140px;border-radius:8px 0 0 0">Город</th>';
+  TL_MONTHS.forEach((m,i)=>{
+    html += `<th id="tl-hm-th-${i}" style="background:var(--navy);color:#fff;padding:8px 10px;text-align:center;min-width:56px;font-weight:700;font-size:10px">${m.replace('2026-','')}</th>`;
+  });
+  html += '</tr></thead><tbody>';
+
+  TL_TOP_CITIES.forEach(city=>{
+    html += `<tr><td style="padding:7px 12px;font-size:12px;font-weight:600;white-space:nowrap;border-bottom:1px solid var(--border)">${city}</td>`;
+    TL_MONTHS.forEach((m,i)=>{
+      const v = TL_HEATMAP_DATA[city]?.[m];
+      html += `<td class="tl-col-${i}" style="text-align:center;padding:5px 8px;background:${heat(v)};color:${fc(v)};font-family:monospace;font-size:11px;font-weight:700;border-bottom:1px solid rgba(0,0,0,.05);transition:opacity .3s">${v!=null?v+'%':'—'}</td>`;
+    });
+    html += '</tr>';
+  });
+  html += '</tbody>';
+  document.getElementById('tl-heatmap').innerHTML = html;
+}
+
+function tlPlay(){
+  if(TL_PLAYING){
+    // Пауза
+    clearInterval(TL_TIMER);
+    TL_PLAYING = false;
+    document.getElementById('tl-btn-play').textContent = '▶ Продолжить';
+    return;
+  }
+  TL_PLAYING = true;
+  document.getElementById('tl-btn-play').textContent = '⏸ Пауза';
+  const speed = parseInt(document.getElementById('tl-speed').value)||1200;
+
+  TL_TIMER = setInterval(()=>{
+    if(TL_IDX >= TL_MONTHS.length - 1){
+      clearInterval(TL_TIMER);
+      TL_PLAYING = false;
+      document.getElementById('tl-btn-play').textContent = '▶ Заново';
+      return;
+    }
+    tlGoTo(TL_IDX + 1);
+  }, speed);
+}
+
+function tlReset(){
+  clearInterval(TL_TIMER);
+  TL_PLAYING = false;
+  document.getElementById('tl-btn-play').textContent = '▶ Старт';
+  tlGoTo(0);
+}
+
 </script>
 </body>
 </html>
