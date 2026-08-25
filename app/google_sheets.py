@@ -110,7 +110,7 @@ def load_from_google_sheets(spreadsheet_id: str = None, sheet_names: list = None
                 print(f'[GSheets] Лист "{sheet_name}" пустой, пропускаем')
                 continue
             df = pd.DataFrame(data[1:], columns=data[0])
-            # Google Sheets возвращает всё как строки — конвертируем числовые колонки
+            # Google Sheets возвращает числа с неразрывным пробелом \xa0 как разделитель тысяч
             numeric_cols = ['Сумма', 'Стоимость доставки',
                             'Тариф за услугу по доставке и выдаче отправлений, руб. с НДС',
                             'Агентское вознаграждение, с НДС руб.',
@@ -119,7 +119,10 @@ def load_from_google_sheets(spreadsheet_id: str = None, sheet_names: list = None
             for col in numeric_cols:
                 if col in df.columns:
                     df[col] = pd.to_numeric(
-                        df[col].astype(str).str.replace(',', '.').str.replace(' ', ''),
+                        df[col].astype(str)
+                            .str.replace('\xa0', '', regex=False)  # неразрывный пробел
+                            .str.replace(' ', '', regex=False)      # обычный пробел
+                            .str.replace(',', '.', regex=False),    # запятая → точка
                         errors='coerce'
                     )
             df['_источник'] = sheet_name
