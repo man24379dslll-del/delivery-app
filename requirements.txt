@@ -6,3 +6,5 @@ pandas==2.2.2
 numpy==1.26.4
 supabase==2.4.5
 python-dotenv==1.0.1
+gspread==6.1.2
+google-auth==2.29.0

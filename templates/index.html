@@ -361,6 +361,17 @@ tbody tr.clickable{cursor:pointer}
       <span>↑</span><span>Загрузить файл</span>
     </label>
     <input type="file" id="file-input" accept=".xlsx,.xls">
+    <button onclick="syncGSheets()" id="gs-btn" style="
+      width:100%;margin-top:8px;padding:10px;
+      background:rgba(16,185,129,.2);color:#10B981;
+      border:1px solid rgba(16,185,129,.3);border-radius:8px;
+      font-size:13px;font-weight:600;cursor:pointer;
+      display:flex;align-items:center;justify-content:center;gap:8px;
+      transition:all .15s;
+    ">
+      <span>🔄</span><span>Синхр. Google Sheets</span>
+    </button>
+    <div style="font-size:10px;color:#475569;margin-top:6px;text-align:center" id="gs-status"></div>
   </div>
 </aside>
 
@@ -1883,6 +1894,41 @@ function tlReset(){
   document.getElementById('tl-btn-play').textContent = '▶ Старт';
   tlGoTo(0);
 }
+
+// ── Google Sheets синхронизация ──────────────────────────────────────
+async function syncGSheets(){
+  const btn = document.getElementById('gs-btn');
+  const status = document.getElementById('gs-status');
+  btn.style.opacity = '.6';
+  btn.innerHTML = '<span>⏳</span><span>Загружаем...</span>';
+  status.textContent = 'Подключаемся к Google Sheets...';
+  try{
+    const r = await fetch('/api/gsheets/sync', {method:'POST'});
+    const j = await r.json();
+    if(!r.ok) throw new Error(j.detail||'Ошибка');
+    renderAll(j.analytics, j.filename, j.rows);
+    btn.innerHTML = '<span>✅</span><span>Синхронизировано</span>';
+    status.textContent = `${j.rows.toLocaleString('ru')} строк · ${new Date().toLocaleTimeString('ru')}`;
+    setTimeout(()=>{ btn.innerHTML = '<span>🔄</span><span>Синхр. Google Sheets</span>'; }, 3000);
+  }catch(e){
+    btn.innerHTML = '<span>❌</span><span>Ошибка</span>';
+    status.textContent = e.message;
+    setTimeout(()=>{ btn.innerHTML = '<span>🔄</span><span>Синхр. Google Sheets</span>'; }, 4000);
+  }
+  btn.style.opacity = '1';
+}
+
+// Проверяем статус при загрузке страницы
+window.addEventListener('load', ()=>{
+  fetch('/api/gsheets/status').then(r=>r.json()).then(s=>{
+    if(!s.configured){
+      const btn = document.getElementById('gs-btn');
+      if(btn){ btn.style.opacity='.4'; btn.title='Нужен credentials.json'; }
+      const st = document.getElementById('gs-status');
+      if(st) st.textContent = 'Нет credentials.json';
+    }
+  }).catch(()=>{});
+});
 
 </script>
 </body>

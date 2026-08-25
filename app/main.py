@@ -130,3 +130,57 @@ async def get_upload(upload_id: str):
 @app.get("/api/health")
 async def health():
     return {"status": "ok", "time": datetime.now().isoformat()}
+
+
+# ── Google Sheets интеграция ────────────────────────────────────────
+from app.google_sheets import is_configured, get_cached_or_load, SPREADSHEET_ID
+
+@app.get("/api/gsheets/status")
+async def gsheets_status():
+    """Проверяет статус подключения к Google Sheets."""
+    configured = is_configured()
+    return JSONResponse({
+        "configured": configured,
+        "spreadsheet_id": SPREADSHEET_ID,
+        "cached": _cached_data is not None,
+        "message": "Google Sheets подключён" if configured else "Нужен credentials.json"
+    })
+
+
+@app.post("/api/gsheets/sync")
+async def gsheets_sync(force: bool = False):
+    """Загружает данные из Google Sheets и пересчитывает аналитику."""
+    global _cached_data, _cached_filename
+    if not is_configured():
+        raise HTTPException(400, "Google Sheets не настроен. Добавьте credentials.json")
+    try:
+        from app.analytics import load_and_parse, run_full_analytics
+        import io
+
+        print("[GSheets Sync] Загружаем данные...")
+        raw_df = get_cached_or_load(force_reload=force)
+
+        # Конвертируем DataFrame обратно в Excel bytes для load_and_parse
+        # (переиспользуем существующий парсер)
+        buf = io.BytesIO()
+        with pd.ExcelWriter(buf, engine='openpyxl') as writer:
+            # Группируем по источнику
+            for src, grp in raw_df.groupby('_источник', dropna=False):
+                sheet = str(src) if pd.notna(src) else 'Sheet1'
+                grp.drop(columns=['_источник'], errors='ignore').to_excel(writer, sheet_name=sheet[:31], index=False)
+        buf.seek(0)
+
+        data = load_and_parse(buf.read())
+        analytics = run_full_analytics(data)
+
+        _cached_data = data
+        _cached_filename = f"Google Sheets · {SPREADSHEET_ID[:8]}..."
+
+        return JSONResponse({
+            "status": "ok",
+            "rows": len(data),
+            "filename": _cached_filename,
+            "analytics": analytics,
+        })
+    except Exception as e:
+        raise HTTPException(500, f"Ошибка синхронизации: {e}")
