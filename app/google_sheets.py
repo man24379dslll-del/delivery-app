@@ -23,7 +23,10 @@ SCOPES = [
 ]
 
 # ID таблицы — можно задать через переменную окружения
+# Для нескольких таблиц используйте GOOGLE_SHEET_IDS через запятую:
+# GOOGLE_SHEET_IDS=id1,id2,id3
 SPREADSHEET_ID = os.getenv('GOOGLE_SHEET_ID', '1nfg7-UTUTlMO3Aq3VUQpsMhDf0J7iS_Y1tacw7MA2O0')
+SPREADSHEET_IDS = [sid.strip() for sid in os.getenv('GOOGLE_SHEET_IDS', SPREADSHEET_ID).split(',') if sid.strip()]
 
 # Листы которые читаем (можно несколько для разных периодов)
 SHEET_NAMES = os.getenv('GOOGLE_SHEET_NAMES', 'Чеки ЗДР 26,Чеки увел 26').split(',')
@@ -150,16 +153,21 @@ def load_from_google_sheets(spreadsheet_id: str = None, sheet_names: list = None
         data5 = ws5.get_all_values()
         df5 = pd.DataFrame(data5[1:], columns=data5[0])
         col5 = next((c for c in df5.columns if 'услугу по доставке' in c), None)
-        key5 = next((c for c in df5.columns if 'Отправления Заказчика' in c or 'заказа' in c.lower()), None)
+        key5 = next((c for c in df5.columns if 'Отправления Заказчика' in c), None)
         if col5 and key5:
             df5['_key'] = df5[key5].astype(str).str.strip()
             df5[col5] = clean_num(df5[col5])
             tarif5 = df5.groupby('_key')[col5].mean()
             result['Номер посылки'] = result['Номер посылки'].astype(str).str.strip()
             mask5 = result['Способ получения'].str.lower().str.contains('5post', na=False)
-            result.loc[mask5, 'Тариф за услугу по доставке и выдаче отправлений, руб. с НДС'] = \
-                result.loc[mask5, 'Номер посылки'].map(tarif5)
-            print(f'[GSheets] 5Post тарифов: {mask5.sum()}')
+            col_dest = 'Тариф за услугу по доставке и выдаче отправлений, руб. с НДС'
+            if col_dest not in result.columns:
+                result[col_dest] = float('nan')
+            result.loc[mask5, col_dest] = result.loc[mask5, 'Номер посылки'].map(tarif5)
+            matched = result.loc[mask5, col_dest].notna().sum()
+            print(f'[GSheets] 5Post тарифов найдено: {matched} из {mask5.sum()}')
+        else:
+            print(f'[GSheets] 5Post: col={col5}, key={key5}')
     except Exception as e:
         print(f'[GSheets] 5пост: {e}')
 
@@ -167,16 +175,24 @@ def load_from_google_sheets(spreadsheet_id: str = None, sheet_names: list = None
         wsc = spreadsheet.worksheet('сдек')
         datac = wsc.get_all_values()
         dfc = pd.DataFrame(datac[1:], columns=datac[0])
-        colc = next((c for c in dfc.columns if 'услуги' in c.lower() or 'Суммазауслуги' in c), None)
-        keyc = next((c for c in dfc.columns if 'заказа' in c.lower() or '№' in c), None)
+        # В Google Sheets колонка называется 'Суммазауслуги' (без пробелов)
+        colc = next((c for c in dfc.columns if 'Суммазауслуги' in c or 'сумма за услуги' in c.lower()), None)
+        keyc = next((c for c in dfc.columns if '№ заказа' == c.strip()), None)
+        if not keyc:
+            keyc = next((c for c in dfc.columns if 'заказ' in c.lower() and '№' in c), None)
         if colc and keyc:
             dfc['_key'] = dfc[keyc].astype(str).str.strip()
             dfc[colc] = clean_num(dfc[colc])
             tarifc = dfc.groupby('_key')[colc].mean()
             maskc = result['Способ получения'].str.lower().str.contains('cdek', na=False)
+            if 'сдек Сумма за услуги' not in result.columns:
+                result['сдек Сумма за услуги'] = float('nan')
             result.loc[maskc, 'сдек Сумма за услуги'] = \
                 result.loc[maskc, 'Номер посылки'].map(tarifc)
-            print(f'[GSheets] СДЭК тарифов: {maskc.sum()}')
+            matched = result.loc[maskc, 'сдек Сумма за услуги'].notna().sum()
+            print(f'[GSheets] СДЭК тарифов найдено: {matched} из {maskc.sum()}')
+        else:
+            print(f'[GSheets] СДЭК: col={colc}, key={keyc}')
     except Exception as e:
         print(f'[GSheets] сдек: {e}')
 
@@ -198,6 +214,31 @@ def load_from_google_sheets(spreadsheet_id: str = None, sheet_names: list = None
         print(f'[GSheets] почта: {e}')
 
     print(f'[GSheets] Итого: {len(result):,} строк')
+    return result
+
+
+def load_from_multiple_sheets(spreadsheet_ids: list = None, sheet_names: list = None) -> pd.DataFrame:
+    """
+    Загружает данные из нескольких Google Sheets и объединяет их.
+    Используется когда данные разбиты по нескольким файлам (например по годам).
+    """
+    ids = spreadsheet_ids or SPREADSHEET_IDS
+    all_dfs = []
+
+    for sid in ids:
+        try:
+            print(f'[GSheets] Загружаем таблицу {sid[:20]}...')
+            df = load_from_google_sheets(sid, sheet_names)
+            df['_spreadsheet_id'] = sid
+            all_dfs.append(df)
+        except Exception as e:
+            print(f'[GSheets] Ошибка таблицы {sid[:20]}: {e}')
+
+    if not all_dfs:
+        raise ValueError('Не удалось загрузить данные ни из одной таблицы')
+
+    result = pd.concat(all_dfs, ignore_index=True)
+    print(f'[GSheets] Всего из {len(all_dfs)} таблиц: {len(result):,} строк')
     return result
 
 
