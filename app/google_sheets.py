@@ -120,9 +120,9 @@ def load_from_google_sheets(spreadsheet_id: str = None, sheet_names: list = None
                 if col in df.columns:
                     df[col] = pd.to_numeric(
                         df[col].astype(str)
-                            .str.replace('\xa0', '', regex=False)  # неразрывный пробел
-                            .str.replace(' ', '', regex=False)      # обычный пробел
-                            .str.replace(',', '.', regex=False),    # запятая → точка
+                            .str.replace('\xa0', '', regex=False)
+                            .str.replace(' ', '', regex=False)
+                            .str.replace(',', '.', regex=False),
                         errors='coerce'
                     )
             df['_источник'] = sheet_name
@@ -135,6 +135,68 @@ def load_from_google_sheets(spreadsheet_id: str = None, sheet_names: list = None
         raise ValueError(f'Не найдено ни одного листа из: {sheets}')
 
     result = pd.concat(dfs, ignore_index=True)
+
+    # ── Подтягиваем тарифы из отдельных листов (5пост, сдек, почта) ──
+    def clean_num(s):
+        return pd.to_numeric(
+            s.astype(str).str.replace('\xa0','',regex=False)
+                         .str.replace(' ','',regex=False)
+                         .str.replace(',','.',regex=False),
+            errors='coerce'
+        )
+
+    try:
+        ws5 = spreadsheet.worksheet('5пост')
+        data5 = ws5.get_all_values()
+        df5 = pd.DataFrame(data5[1:], columns=data5[0])
+        col5 = next((c for c in df5.columns if 'услугу по доставке' in c), None)
+        key5 = next((c for c in df5.columns if 'Отправления Заказчика' in c or 'заказа' in c.lower()), None)
+        if col5 and key5:
+            df5['_key'] = df5[key5].astype(str).str.strip()
+            df5[col5] = clean_num(df5[col5])
+            tarif5 = df5.groupby('_key')[col5].mean()
+            result['Номер посылки'] = result['Номер посылки'].astype(str).str.strip()
+            mask5 = result['Способ получения'].str.lower().str.contains('5post', na=False)
+            result.loc[mask5, 'Тариф за услугу по доставке и выдаче отправлений, руб. с НДС'] = \
+                result.loc[mask5, 'Номер посылки'].map(tarif5)
+            print(f'[GSheets] 5Post тарифов: {mask5.sum()}')
+    except Exception as e:
+        print(f'[GSheets] 5пост: {e}')
+
+    try:
+        wsc = spreadsheet.worksheet('сдек')
+        datac = wsc.get_all_values()
+        dfc = pd.DataFrame(datac[1:], columns=datac[0])
+        colc = next((c for c in dfc.columns if 'услуги' in c.lower() or 'Суммазауслуги' in c), None)
+        keyc = next((c for c in dfc.columns if 'заказа' in c.lower() or '№' in c), None)
+        if colc and keyc:
+            dfc['_key'] = dfc[keyc].astype(str).str.strip()
+            dfc[colc] = clean_num(dfc[colc])
+            tarifc = dfc.groupby('_key')[colc].mean()
+            maskc = result['Способ получения'].str.lower().str.contains('cdek', na=False)
+            result.loc[maskc, 'сдек Сумма за услуги'] = \
+                result.loc[maskc, 'Номер посылки'].map(tarifc)
+            print(f'[GSheets] СДЭК тарифов: {maskc.sum()}')
+    except Exception as e:
+        print(f'[GSheets] сдек: {e}')
+
+    try:
+        wsp = spreadsheet.worksheet('почта')
+        datap = wsp.get_all_values()
+        dfp = pd.DataFrame(datap[1:], columns=datap[0])
+        colp = next((c for c in dfp.columns if 'TARIF' in c or 'тариф' in c.lower()), None)
+        keyp = next((c for c in dfp.columns if 'посылки' in c.lower() or 'номер' in c.lower()), None)
+        if colp and keyp:
+            dfp['_key'] = dfp[keyp].astype(str).str.strip()
+            dfp[colp] = clean_num(dfp[colp])
+            tarifp = dfp.groupby('_key')[colp].mean()
+            maskp = result['Способ получения'].str.lower().str.contains('почта', na=False)
+            result.loc[maskp, 'почта TARIF'] = \
+                result.loc[maskp, 'Номер посылки'].map(tarifp)
+            print(f'[GSheets] Почта тарифов: {maskp.sum()}')
+    except Exception as e:
+        print(f'[GSheets] почта: {e}')
+
     print(f'[GSheets] Итого: {len(result):,} строк')
     return result
 
