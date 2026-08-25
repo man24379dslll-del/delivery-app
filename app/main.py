@@ -134,7 +134,8 @@ async def health():
 
 
 # ── Google Sheets интеграция ────────────────────────────────────────
-from app.google_sheets import is_configured, get_cached_or_load, SPREADSHEET_ID
+from app.google_sheets import (is_configured, get_cached_or_load,
+                               load_from_multiple_sheets, SPREADSHEET_IDS)
 
 @app.get("/api/gsheets/status")
 async def gsheets_status():
@@ -142,45 +143,38 @@ async def gsheets_status():
     configured = is_configured()
     return JSONResponse({
         "configured": configured,
-        "spreadsheet_id": SPREADSHEET_ID,
+        "spreadsheet_ids": SPREADSHEET_IDS,
+        "tables_count": len(SPREADSHEET_IDS),
         "cached": _cached_data is not None,
-        "message": "Google Sheets подключён" if configured else "Нужен credentials.json"
+        "message": f"Подключено {len(SPREADSHEET_IDS)} таблиц" if configured else "Нужен credentials.json"
     })
 
 
 @app.post("/api/gsheets/sync")
 async def gsheets_sync(force: bool = False):
-    """Загружает данные из Google Sheets и пересчитывает аналитику."""
+    """Загружает данные из всех Google Sheets и пересчитывает аналитику."""
     global _cached_data, _cached_filename
     if not is_configured():
-        raise HTTPException(400, "Google Sheets не настроен. Добавьте credentials.json")
+        raise HTTPException(400, "Google Sheets не настроен")
     try:
-        from app.analytics import load_and_parse, run_full_analytics
-        import io
+        from app.analytics import parse_dataframe, run_full_analytics
 
-        print("[GSheets Sync] Загружаем данные...")
-        raw_df = get_cached_or_load(force_reload=force)
+        print(f"[GSheets Sync] Загружаем из {len(SPREADSHEET_IDS)} таблиц...")
+        raw_df = load_from_multiple_sheets()
 
-        # Конвертируем DataFrame обратно в Excel bytes для load_and_parse
-        # (переиспользуем существующий парсер)
-        buf = io.BytesIO()
-        with pd.ExcelWriter(buf, engine='openpyxl') as writer:
-            # Группируем по источнику
-            for src, grp in raw_df.groupby('_источник', dropna=False):
-                sheet = str(src) if pd.notna(src) else 'Sheet1'
-                grp.drop(columns=['_источник'], errors='ignore').to_excel(writer, sheet_name=sheet[:31], index=False)
-        buf.seek(0)
-
-        data = load_and_parse(buf.read())
+        # Парсим DataFrame напрямую — тарифы уже подтянуты из листов Google Sheets
+        data = parse_dataframe(raw_df)
         analytics = run_full_analytics(data)
 
         _cached_data = data
-        _cached_filename = f"Google Sheets · {SPREADSHEET_ID[:8]}..."
+        n = len(SPREADSHEET_IDS)
+        _cached_filename = f"Google Sheets · {n} {'таблица' if n==1 else 'таблицы' if n<5 else 'таблиц'}"
 
         return JSONResponse({
             "status": "ok",
             "rows": len(data),
             "filename": _cached_filename,
+            "tables": len(SPREADSHEET_IDS),
             "analytics": analytics,
         })
     except Exception as e:

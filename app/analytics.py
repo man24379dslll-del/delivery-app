@@ -104,6 +104,76 @@ def load_tariffs_from_xl(xl) -> dict:
     return result
 
 
+def parse_dataframe(data: pd.DataFrame) -> pd.DataFrame:
+    """
+    Обрабатывает уже загруженный DataFrame (например из Google Sheets).
+    Выполняет те же преобразования что load_and_parse но без чтения Excel.
+    """
+    data = data[data['Статус'] != 'Первичный заказ'].copy()
+
+    data['ТК']             = data['Способ получения'].apply(normalize_tk)
+    data['Сегмент_города'] = data['Населенный пункт'].apply(get_population_segment)
+    data['Статус_группа']  = data['Статус'].apply(classify_status)
+    data['Сумма']          = pd.to_numeric(data['Сумма'], errors='coerce').fillna(0)
+    dc = data.get('Стоимость доставки', pd.Series(0, index=data.index))
+    data['Стоимость доставки'] = pd.to_numeric(dc, errors='coerce').fillna(0)
+
+    data['Номер посылки'] = data['Номер посылки'].astype(str).str.strip() \
+        if 'Номер посылки' in data.columns else ''
+    data['Номер посылки'] = data['Номер посылки'].replace('nan', '')
+
+    # тариф_факт уже подтянут из Google Sheets листов
+    # просто конвертируем в числа если нужно
+    col5 = 'Тариф за услугу по доставке и выдаче отправлений, руб. с НДС'
+    data['тариф_факт'] = np.nan
+    m5 = data['ТК'] == '5Post'
+    mc = data['ТК'] == 'СДЭК'
+    mp = data['ТК'] == 'Почта России'
+
+    if col5 in data.columns:
+        data.loc[m5, 'тариф_факт'] = pd.to_numeric(data.loc[m5, col5], errors='coerce')
+    if 'сдек Сумма за услуги' in data.columns:
+        data.loc[mc, 'тариф_факт'] = pd.to_numeric(data.loc[mc, 'сдек Сумма за услуги'], errors='coerce')
+    if 'почта TARIF' in data.columns:
+        data.loc[mp, 'тариф_факт'] = pd.to_numeric(data.loc[mp, 'почта TARIF'], errors='coerce')
+
+    # Курьер своя
+    mk = data['ТК'] == 'Курьер (свой)'
+    data.loc[mk, 'тариф_факт'] = data.loc[mk, 'Сегмент_города'].map(
+        lambda s: COURIER_TARIFF_CITY if s == '100 тыс.+' else COURIER_TARIFF_REGION
+    )
+
+    # Fallback из справочника
+    no_tarif = data['тариф_факт'].isna()
+    if no_tarif.any() and _tariffs_module.TARIFFS:
+        def lookup(row):
+            if pd.notna(row['тариф_факт']): return row['тариф_факт']
+            t = get_tariff_for_region(row.get('Регион',''), row['ТК'])
+            return t if t else np.nan
+        data.loc[no_tarif, 'тариф_факт'] = data[no_tarif].apply(lookup, axis=1)
+
+    # Даты
+    for col in DATE_COLS:
+        if col in data.columns:
+            data[col] = pd.to_datetime(data[col], dayfirst=True, errors='coerce')
+
+    # Сроки
+    has_full = data['Дата создания'].notna() & data['Дата вручения получателю'].notna()
+    data['срок_полный_дн'] = np.where(
+        has_full,
+        (data['Дата вручения получателю'] - data['Дата создания']).dt.days, np.nan)
+    has_tr = data['Дата ухода с почты'].notna() & data['Дата прихода'].notna()
+    data['срок_в_пути_дн'] = np.where(
+        has_tr,
+        (data['Дата прихода'] - data['Дата ухода с почты']).dt.days, np.nan)
+    has_pvz = data['Дата прихода'].notna() & data['Дата вручения получателю'].notna()
+    data['срок_ожидания_дн'] = np.where(
+        has_pvz,
+        (data['Дата вручения получателю'] - data['Дата прихода']).dt.days, np.nan)
+
+    return data
+
+
 def load_and_parse(file_bytes: bytes) -> pd.DataFrame:
     import io
     xl = pd.ExcelFile(io.BytesIO(file_bytes))
