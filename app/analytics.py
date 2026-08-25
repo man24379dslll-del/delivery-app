@@ -486,12 +486,11 @@ def calc_city_heatmap(data, top_n=20):
     d = data.dropna(subset=['Дата создания']).copy()
     d['month'] = d['Дата создания'].dt.to_period('M').astype(str)
 
-    # Топ городов по общему объёму
     top_cities = (d.groupby('Населенный пункт').size()
                    .sort_values(ascending=False)
                    .head(top_n).index.tolist())
 
-    result = {}  # city -> {month -> delivery_rate}
+    result = {}
     for city in top_cities:
         result[city] = {}
         city_df = d[d['Населенный пункт'] == city]
@@ -500,6 +499,37 @@ def calc_city_heatmap(data, top_n=20):
             delivered = (g['Статус_группа'] == 'Доставлен').sum()
             result[city][month] = round(delivered/total*100, 1) if total >= 5 else None
 
+    return result
+
+
+def calc_city_month_tk(data, top_n=20):
+    """% выкупа по городу × месяц × ТК — для развёртки в тепловой карте."""
+    if 'Дата создания' not in data.columns: return {}
+    d = data.dropna(subset=['Дата создания']).copy()
+    d['month'] = d['Дата создания'].dt.to_period('M').astype(str)
+
+    top_cities = (d.groupby('Населенный пункт').size()
+                   .sort_values(ascending=False)
+                   .head(top_n).index.tolist())
+
+    result = {}  # city -> month -> {tk -> {rate, total, delivered}}
+    for city in top_cities:
+        result[city] = {}
+        city_df = d[d['Населенный пункт'] == city]
+        for month, mg in city_df.groupby('month'):
+            result[city][month] = {}
+            for tk, tg in mg.groupby('ТК'):
+                total     = len(tg)
+                delivered = (tg['Статус_группа'] == 'Доставлен').sum()
+                returned  = (tg['Статус_группа'] == 'Возврат').sum()
+                if total < 3: continue
+                result[city][month][tk] = {
+                    'total':         int(total),
+                    'delivered':     int(delivered),
+                    'returned':      int(returned),
+                    'delivery_rate': round(delivered/total*100, 1),
+                    'return_rate':   round(returned/total*100, 1),
+                }
     return result
 
 def calc_trend_by_tk(data):
@@ -574,6 +604,7 @@ def run_full_analytics(data: pd.DataFrame, month: str = '') -> dict:
         'trend':           calc_trend(data),       # тренд всегда по всем данным
         'trend_by_tk':     calc_trend_by_tk(data), # тренд всегда по всем данным
         'city_heatmap':    calc_city_heatmap(data, top_n=20),
+        'city_month_tk':   calc_city_month_tk(data, top_n=20),
         'segment_matrix':  calc_segment_matrix(filtered),
         'segments_order':  SEGMENTS_ORDER,
         'available_months': get_available_months(data),

@@ -933,6 +933,7 @@ function renderAll(data, filename, rows){
   MONTHS_DATA = data.trend || [];
   MONTHS_DATA_BY_TK = data.trend_by_tk || {};
   window._cityDataMap = {};
+  window._cityMonthTK = data.city_month_tk || {};
   CITY_DATA.forEach(r=>{ window._cityDataMap[r.city+'_'+r.region] = r; });
 
   // Sidebar info
@@ -1857,7 +1858,7 @@ function tlRenderHeatmap(){
     html += `<tr><td style="padding:7px 12px;font-size:12px;font-weight:600;white-space:nowrap;border-bottom:1px solid var(--border)">${city}</td>`;
     TL_MONTHS.forEach((m,i)=>{
       const v = TL_HEATMAP_DATA[city]?.[m];
-      html += `<td class="tl-col-${i}" style="text-align:center;padding:5px 8px;background:${heat(v)};color:${fc(v)};font-family:monospace;font-size:11px;font-weight:700;border-bottom:1px solid rgba(0,0,0,.05);transition:opacity .3s">${v!=null?v+'%':'—'}</td>`;
+      html += `<td class="tl-col-${i}" onclick="showCityMonthTK('${city.replace(/'/g,"\\'")}','${m}')" style="text-align:center;padding:5px 8px;background:${heat(v)};color:${fc(v)};font-family:monospace;font-size:11px;font-weight:700;border-bottom:1px solid rgba(0,0,0,.05);transition:opacity .3s;cursor:pointer" title="${city} · ${m}">${v!=null?v+'%':'—'}</td>`;
     });
     html += '</tr>';
   });
@@ -1896,6 +1897,47 @@ function tlReset(){
 }
 
 // ── Google Sheets синхронизация ──────────────────────────────────────
+// ── Попап: город × месяц × ТК ───────────────────────────────────────
+function showCityMonthTK(city, month){
+  const data = (window._cityMonthTK||{})[city]?.[month];
+  const cityRate = (TL_HEATMAP_DATA[city]||{})[month];
+  const heat = v=>{
+    if(v==null) return 'var(--border)';
+    if(v>=60) return '#6EE7B7'; if(v>=50) return '#A7F3D0';
+    if(v>=40) return '#FEF9C3'; if(v>=30) return '#FED7AA';
+    return '#FECACA';
+  };
+  let content = '';
+  if(!data || !Object.keys(data).length){
+    content = '<p style="color:var(--soft);font-size:13px;text-align:center;padding:20px">Нет данных по ТК за этот месяц</p>';
+  } else {
+    const tks = Object.entries(data).sort((a,b)=>b[1].delivery_rate-a[1].delivery_rate);
+    content = `<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:10px">
+      ${tks.map(([tk,d])=>`
+        <div style="border:1px solid var(--border);border-radius:10px;padding:14px;background:${heat(d.delivery_rate)}22">
+          <div style="font-size:12px;font-weight:700;margin-bottom:8px">${tk}</div>
+          <div style="display:flex;justify-content:space-between;font-size:12px;padding:3px 0;border-bottom:1px solid var(--border)">
+            <span style="color:var(--soft)">Заказов</span><span style="font-family:monospace;font-weight:700">${d.total}</span>
+          </div>
+          <div style="display:flex;justify-content:space-between;font-size:12px;padding:3px 0;border-bottom:1px solid var(--border)">
+            <span style="color:var(--soft)">% выкупа</span>
+            <span style="font-family:monospace;font-weight:700;color:${d.delivery_rate>=50?'var(--green)':'var(--red)'}">${d.delivery_rate}%</span>
+          </div>
+          <div style="display:flex;justify-content:space-between;font-size:12px;padding:3px 0">
+            <span style="color:var(--soft)">% возврата</span>
+            <span style="font-family:monospace;font-weight:700">${d.return_rate}%</span>
+          </div>
+        </div>`).join('')}
+    </div>`;
+  }
+  document.getElementById('cm-city').textContent = `${city} · ${month.replace('2026-','Месяц ')}`;
+  document.getElementById('cm-meta').textContent = `Общий % выкупа: ${cityRate!=null?cityRate+'%':'—'} · Разбивка по ТК`;
+  document.getElementById('cm-kpi').innerHTML = '';
+  document.getElementById('cm-tks').innerHTML = content;
+  document.getElementById('city-overlay').classList.add('open');
+  document.body.style.overflow = 'hidden';
+}
+
 async function syncGSheets(){
   const btn = document.getElementById('gs-btn');
   const status = document.getElementById('gs-status');
