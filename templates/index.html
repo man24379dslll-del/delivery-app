@@ -1314,10 +1314,6 @@ function renderRegions(rows){
     });
     body += '</tr>';
 
-    // Строки городов (скрыты по умолчанию)
-    body += `<tr id="reg-cities-${rKey}" style="display:none"><td colspan="${4+tks.length*3}" style="padding:0">`;
-    body += '<table style="width:100%;border-collapse:collapse">';
-
     // Группируем города по сегментам
     const citiesBySegment = {};
     (r.cities||[]).forEach(c=>{
@@ -1326,9 +1322,13 @@ function renderRegions(rows){
       citiesBySegment[seg].push(c);
     });
 
-    SEGS.forEach(seg=>{
+    // Строки сегментов и городов идут прямо в общей таблице (без вложенной <table>),
+    // поэтому колонки строго совпадают с шапкой. Видимость переключается через data-атрибуты.
+    SEGS.forEach((seg,si)=>{
       const cities = citiesBySegment[seg]||[];
       if(!cities.length) return;
+
+      const sKey = rKey+'_s'+si;
 
       // Строка сегмента
       const segCities = (r.cities||[]).filter(c=>c.segment===seg);
@@ -1336,21 +1336,23 @@ function renderRegions(rows){
       const segDel   = segCities.reduce((s,c)=>s+c.delivered,0);
       const segPct   = segTotal ? Math.round(segDel/segTotal*100) : 0;
 
-      body += `<tr style="background:#EFF6FF">`;
-      body += `<td style="padding:7px 14px 7px 32px;font-weight:700;color:#1D4ED8;font-size:11px;position:sticky;left:0;background:#EFF6FF;min-width:200px">📦 ${seg}</td>`;
+      body += `<tr class="regseg-row" data-region="${rKey}" style="display:none;background:#EFF6FF;cursor:pointer" onclick="toggleSegRow('${sKey}')">`;
+      body += `<td style="padding:7px 14px 7px 32px;font-weight:700;color:#1D4ED8;font-size:11px;position:sticky;left:0;background:#EFF6FF;min-width:200px">
+        <span id="seg-arrow-${sKey}" style="margin-right:6px;font-size:9px;transition:transform .2s;display:inline-block">▶</span>📦 ${seg}
+      </td>`;
       body += `<td style="padding:7px 8px;text-align:center;font-size:11px;color:#1D4ED8;min-width:70px">${cities.length} городов</td>`;
       body += `<td style="padding:7px 8px;text-align:center;font-family:monospace;font-size:11px;min-width:70px">${fmt(segTotal)}</td>`;
       body += `<td style="padding:7px 8px;text-align:center;font-family:monospace;font-weight:700;color:${segPct>=50?'#10B981':'#F43F5E'};font-size:11px;min-width:70px">${segPct}%</td>`;
       tks.forEach(tk=>{ body += '<td colspan="3" style="background:#EFF6FF"></td>'; });
       body += '</tr>';
 
-      // Строки городов
+      // Строки городов (скрыты по умолчанию, раскрываются по клику на сегмент)
       cities.forEach(c=>{
         if(q && !c.city.toLowerCase().includes(q) && !r.region.toLowerCase().includes(q)) return;
         const cPct = c.delivery_rate||0;
         const cColor = cPct>=50?'#10B981':'#F43F5E';
         const dk = c.city+'_'+r.region;
-        body += `<tr style="cursor:pointer" onclick="openCityByKey('${dk.replace(/'/g,"\\'")}')">`;
+        body += `<tr class="regcity-row" data-region="${rKey}" data-seg="${sKey}" style="display:none;cursor:pointer" onclick="openCityByKey('${dk.replace(/'/g,"\\'")}')">`;
         body += `<td style="padding:6px 14px 6px 48px;color:#374151;font-size:11px;position:sticky;left:0;background:#FAFAFA;min-width:200px">${c.city}</td>`;
         body += `<td style="padding:6px 8px;text-align:center;font-size:10px;color:#94A3B8;min-width:70px">${c.segment||''}</td>`;
         body += `<td style="padding:6px 8px;text-align:center;font-family:monospace;font-size:11px;min-width:70px">${fmt(c.total)}</td>`;
@@ -1369,8 +1371,6 @@ function renderRegions(rows){
         body += '</tr>';
       });
     });
-
-    body += '</table></td></tr>';
   });
 
   document.getElementById('reg-main-body').innerHTML = body;
@@ -1387,11 +1387,25 @@ function renderRegions(rows){
 }
 
 function toggleRegRow(key){
-  const row  = document.getElementById('reg-cities-'+key);
-  const arrow= document.getElementById('reg-arrow-'+key);
-  if(!row) return;
-  const open = row.style.display === 'none';
-  row.style.display   = open ? '' : 'none';
+  const segRows = document.querySelectorAll('.regseg-row[data-region="'+key+'"]');
+  if(!segRows.length) return;
+  const arrow = document.getElementById('reg-arrow-'+key);
+  const open  = segRows[0].style.display === 'none';
+  segRows.forEach(row=>{ row.style.display = open ? 'table-row' : 'none'; });
+  if(arrow) arrow.style.transform = open ? 'rotate(90deg)' : '';
+  if(!open){
+    // Регион закрыли — сворачиваем и все сегменты внутри него, чтобы при повторном открытии
+    // города снова были скрыты (не "провисали" видимыми без родителя).
+    document.querySelectorAll('.regcity-row[data-region="'+key+'"]').forEach(row=>{ row.style.display='none'; });
+    document.querySelectorAll('.regseg-row[data-region="'+key+'"] span[id^="seg-arrow-"]').forEach(a=>{ a.style.transform=''; });
+  }
+}
+function toggleSegRow(key){
+  const cityRows = document.querySelectorAll('.regcity-row[data-seg="'+key+'"]');
+  if(!cityRows.length) return;
+  const arrow = document.getElementById('seg-arrow-'+key);
+  const open  = cityRows[0].style.display === 'none';
+  cityRows.forEach(row=>{ row.style.display = open ? 'table-row' : 'none'; });
   if(arrow) arrow.style.transform = open ? 'rotate(90deg)' : '';
 }
 // ══════════════════════════════════════════════════════════════
