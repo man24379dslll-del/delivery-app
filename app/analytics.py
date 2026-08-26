@@ -498,7 +498,26 @@ def calc_by_region(data):
         for city, cg in g.groupby('Населенный пункт'):
             if len(cg) < 5: continue
             cb = _block(cg)
-            cb['city'] = city
+            cb['city']    = city
+            cb['segment'] = get_population_segment(city)
+            # Разбивка по ТК для каждого города
+            tk_bd = {}
+            for tk, tg in cg.groupby('ТК'):
+                if tk not in MAIN_TKS or len(tg) < 3: continue
+                total_tk   = len(tg)
+                delivered  = (tg['Статус_группа']=='Доставлен').sum()
+                returned   = (tg['Статус_группа']=='Возврат').sum()
+                days       = safe_mean(tg[tg['Статус_группа']=='Доставлен']['срок_полный_дн'])
+                avg_tarif  = tg['тариф_факт'].replace(0,np.nan).mean()
+                tk_bd[tk]  = {
+                    'total':         int(total_tk),
+                    'delivered':     int(delivered),
+                    'delivery_rate': round(delivered/total_tk*100,1) if total_tk else None,
+                    'return_rate':   round(returned/total_tk*100,1)  if total_tk else None,
+                    'days':          days,
+                    'avg_tarif':     round(float(avg_tarif),0) if pd.notna(avg_tarif) else None,
+                }
+            cb['tk_breakdown'] = tk_bd
             city_rows.append(cb)
         city_rows.sort(key=lambda x: x['total'], reverse=True)
         r['cities'] = city_rows[:30]
