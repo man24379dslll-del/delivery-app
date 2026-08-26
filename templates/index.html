@@ -383,7 +383,7 @@ tbody tr.clickable{cursor:pointer}
       <span>↑</span><span>Загрузить файл</span>
     </label>
     <input type="file" id="file-input" accept=".xlsx,.xls">
-    <button onclick="syncGSheets()" id="gs-btn" style="
+    <button id="gs-btn" style="
       width:100%;margin-top:8px;padding:10px;
       background:rgba(16,185,129,.2);color:#10B981;
       border:1px solid rgba(16,185,129,.3);border-radius:8px;
@@ -1259,15 +1259,17 @@ function renderRegions(rows){
               <th>% возврата</th><th>Срок, дн.</th><th>Финрез, ₽</th>
             </tr></thead>
             <tbody>
-              ${r.cities.map(c=>`<tr class="clickable" onclick="openCityCard(window._cityDataMap['${(c.city+'_'+r.region).replace(/'/g,\"\\\\'\")}']||{city:'${c.city.replace(/'/g,"\\\\'")}'})">
-                <td><strong>${c.city}</strong></td>
-                <td class="mono">${fmt(c.total)}</td>
-                <td>${rbar(c.delivery_rate)}</td>
-                <td>${badgeR(c.return_rate)}</td>
-                <td class="mono">${fmtD(c.срок_полный_ср)}</td>
-                <td>${finCell(c.finrez)}</td>
-              </tr>`).join('')}
-            </tbody>
+              ${r.cities.map(c=>{
+                const dk = c.city+'_'+r.region;
+                return '<tr class="clickable" onclick="openCityByKey(this.dataset.key)" data-key="'+dk+'">'
+                  +'<td><strong>'+c.city+'</strong></td>'
+                  +'<td class="mono">'+fmt(c.total)+'</td>'
+                  +'<td>'+rbar(c.delivery_rate)+'</td>'
+                  +'<td>'+badgeR(c.return_rate)+'</td>'
+                  +'<td class="mono">'+fmtD(c.срок_полный_ср)+'</td>'
+                  +'<td>'+finCell(c.finrez)+'</td>'
+                  +'</tr>';
+              }).join('')</tbody>
           </table>
         </div>
       </div>` : '';
@@ -2025,6 +2027,12 @@ async function syncGSheets(){
   }
   btn.style.opacity = '1';
 }
+
+// Кнопка синхронизации
+document.addEventListener('DOMContentLoaded', ()=>{
+  const gsBtn = document.getElementById('gs-btn');
+  if(gsBtn) gsBtn.addEventListener('click', syncGSheets);
+});
 
 // Проверяем статус при загрузке страницы
 window.addEventListener('load', ()=>{
