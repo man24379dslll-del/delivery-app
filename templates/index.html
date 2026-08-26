@@ -302,6 +302,28 @@ tbody tr.clickable{cursor:pointer}
   .nav-item{justify-content:center;padding:10px}
   .kpi-hero-stats{gap:16px}
 }
+
+/* ── АККОРДЕОН РЕГИОНОВ ──────────────────────────────────────── */
+.reg-item{background:var(--card);border:1px solid var(--border);border-radius:12px;margin-bottom:8px;overflow:hidden}
+.reg-header{display:flex;align-items:center;gap:16px;padding:14px 18px;cursor:pointer;transition:background .15s;user-select:none}
+.reg-header:hover{background:var(--bg)}.reg-header.open{background:var(--blue-l)}
+.reg-arrow{font-size:12px;color:var(--soft);transition:transform .2s;flex-shrink:0}
+.reg-header.open .reg-arrow{transform:rotate(90deg)}
+.reg-name{font-size:14px;font-weight:700;flex:1}
+.reg-stats{display:flex;gap:20px;flex-wrap:wrap}
+.reg-stat .rv{font-family:var(--mono);font-size:13px;font-weight:700}
+.reg-stat .rl{font-size:10px;color:var(--soft);text-transform:uppercase;letter-spacing:.04em}
+.reg-body-content{display:none;border-top:1px solid var(--border)}
+.reg-body-content.open{display:block}
+.reg-tk-section{padding:16px 18px;border-bottom:1px solid var(--border)}
+.reg-tk-section h4,.reg-cities-section h4{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--soft);margin-bottom:10px}
+.reg-tk-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:10px}
+.reg-tk-card{border:1px solid var(--border);border-radius:8px;padding:12px}
+.reg-tk-card h5{font-size:12px;font-weight:700;margin-bottom:8px}
+.reg-tk-row{display:flex;justify-content:space-between;font-size:11px;padding:2px 0;border-bottom:1px solid rgba(0,0,0,.04)}
+.reg-tk-row:last-child{border:none}
+.reg-tk-row .rtv{font-family:var(--mono);font-weight:700}
+.reg-cities-section{padding:16px 18px}
 </style>
 </head>
 <body>
@@ -517,24 +539,10 @@ tbody tr.clickable{cursor:pointer}
 
     <!-- ── REGIONS PAGE ────────────────────────────────────── -->
     <div class="page" id="page-regions">
-      <div class="sec-hdr"><h2>Регионы</h2><span class="sec-badge" id="reg-badge">—</span></div>
-      <div class="tbl-wrap">
-        <table id="reg-tbl">
-          <thead><tr>
-            <th onclick="sortTbl('reg-tbl',0)">Регион</th>
-            <th onclick="sortTbl('reg-tbl',1)">Заказов</th>
-            <th onclick="sortTbl('reg-tbl',2)">Доля</th>
-            <th onclick="sortTbl('reg-tbl',3)">% выкупа</th>
-            <th onclick="sortTbl('reg-tbl',4)">% возврата</th>
-            <th onclick="sortTbl('reg-tbl',5)">Срок, дн.</th>
-            <th onclick="sortTbl('reg-tbl',6)">В пути, дн.</th>
-            <th onclick="sortTbl('reg-tbl',7)">Финрез, ₽</th>
-            <th onclick="sortTbl('reg-tbl',8)">ROI</th>
-            <th onclick="sortTbl('reg-tbl',9)">Ср. чек, ₽</th>
-          </tr></thead>
-          <tbody id="reg-body"></tbody>
-        </table>
+      <div class="sec-hdr"><h2>Регионы</h2><span class="sec-badge" id="reg-badge">—</span>
+        <span class="sec-sub">Нажмите на регион — разбивка по ТК и городам</span>
       </div>
+      <div id="reg-accordion"></div>
     </div>
 
     <!-- ── SEGMENTS PAGE ───────────────────────────────────── -->
@@ -1220,18 +1228,76 @@ function renderCities(){
 // ══════════════════════════════════════════════════════════════
 function renderRegions(rows){
   document.getElementById('reg-badge').textContent = (rows||[]).length+' регионов';
-  document.getElementById('reg-body').innerHTML = (rows||[]).map(r=>`<tr>
-    <td><strong>${r.region}</strong></td>
-    <td class="mono">${fmt(r.total)}</td>
-    <td><span class="badge bb">${r.share_pct}%</span></td>
-    <td>${rbar(r.delivery_rate)}</td>
-    <td>${badgeR(r.return_rate)}</td>
-    <td class="mono">${fmtD(r.срок_полный_ср)}</td>
-    <td class="mono">${fmtD(r.срок_в_пути_ср)}</td>
-    <td>${finCell(r.finrez)}</td>
-    <td class="mono"><b>${r.roi||'—'}x</b></td>
-    <td class="mono">${fmt(r.avg_check)}</td>
-  </tr>`).join('');
+  const TK_ORDER = ['Почта России','5Post','СДЭК','Курьер (свой)','Курьер (стационар)'];
+  const TK_CLR   = {'5Post':'var(--green)','СДЭК':'var(--blue)','Почта России':'var(--amber)','Курьер (свой)':'var(--purple)','Курьер (стационар)':'var(--red)'};
+
+  document.getElementById('reg-accordion').innerHTML = (rows||[]).map((r,i)=>{
+    const rateColor = (r.delivery_rate||0)>=50?'var(--green)':'var(--red)';
+
+    // ТК карточки
+    const tkHtml = Object.entries(r.tk_breakdown||{})
+      .sort((a,b)=>(b[1].delivery_rate||0)-(a[1].delivery_rate||0))
+      .map(([tk,t])=>`
+        <div class="reg-tk-card">
+          <h5 style="color:${TK_CLR[tk]||'var(--ink)'}">${tk}</h5>
+          <div class="reg-tk-row"><span>Заказов</span><span class="rtv">${fmt(t.total)}</span></div>
+          <div class="reg-tk-row"><span>% выкупа</span><span class="rtv" style="color:${(t.delivery_rate||0)>=50?'var(--green)':'var(--red)'}">${t.delivery_rate||'—'}%</span></div>
+          <div class="reg-tk-row"><span>% возврата</span><span class="rtv">${t.return_rate||'—'}%</span></div>
+          <div class="reg-tk-row"><span>Срок, дн.</span><span class="rtv">${fmtD(t.days)}</span></div>
+          <div class="reg-tk-row"><span>Тариф ср.</span><span class="rtv">${t.avg_tarif?fmt(t.avg_tarif)+'₽':'—'}</span></div>
+          <div class="reg-tk-row"><span>Финрез</span><span class="rtv" style="color:${(t.finrez||0)>0?'var(--green)':'var(--red)'}">${fmt(t.finrez||0)}₽</span></div>
+        </div>`).join('');
+
+    // Города
+    const citiesHtml = (r.cities||[]).length ? `
+      <div class="reg-cities-section">
+        <h4>🏙 Города (${r.cities.length})</h4>
+        <div class="tbl-wrap">
+          <table>
+            <thead><tr>
+              <th>Город</th><th>Заказов</th><th>% выкупа</th>
+              <th>% возврата</th><th>Срок, дн.</th><th>Финрез, ₽</th>
+            </tr></thead>
+            <tbody>
+              ${r.cities.map(c=>`<tr class="clickable" onclick="openCityCard(window._cityDataMap['${(c.city+'_'+r.region).replace(/'/g,\"\\\\'\")}']||{city:'${c.city.replace(/'/g,"\\\\'")}'})">
+                <td><strong>${c.city}</strong></td>
+                <td class="mono">${fmt(c.total)}</td>
+                <td>${rbar(c.delivery_rate)}</td>
+                <td>${badgeR(c.return_rate)}</td>
+                <td class="mono">${fmtD(c.срок_полный_ср)}</td>
+                <td>${finCell(c.finrez)}</td>
+              </tr>`).join('')}
+            </tbody>
+          </table>
+        </div>
+      </div>` : '';
+
+    return `<div class="reg-item">
+      <div class="reg-header" onclick="toggleRegion(${i})">
+        <span class="reg-arrow">▶</span>
+        <span class="reg-name">${r.region}</span>
+        <div class="reg-stats">
+          <div class="reg-stat"><div class="rv">${fmt(r.total)}</div><div class="rl">Заказов</div></div>
+          <div class="reg-stat"><div class="rv" style="color:${rateColor}">${r.delivery_rate||0}%</div><div class="rl">% выкупа</div></div>
+          <div class="reg-stat"><div class="rv">${r.return_rate||0}%</div><div class="rl">% возврата</div></div>
+          <div class="reg-stat"><div class="rv">${fmtD(r.срок_полный_ср)}д</div><div class="rl">Срок</div></div>
+          <div class="reg-stat"><div class="rv" style="color:${(r.finrez||0)>0?'var(--green)':'var(--red)'}">${fmtM(r.finrez||0)}</div><div class="rl">Финрез</div></div>
+          <div class="reg-stat"><div class="rv">${r.roi||'—'}x</div><div class="rl">ROI</div></div>
+        </div>
+      </div>
+      <div class="reg-body-content" id="reg-body-${i}">
+        ${tkHtml ? `<div class="reg-tk-section"><h4>🚚 Транспортные компании</h4><div class="reg-tk-grid">${tkHtml}</div></div>` : ''}
+        ${citiesHtml}
+      </div>
+    </div>`;
+  }).join('');
+}
+
+function toggleRegion(i){
+  const hdr  = document.querySelectorAll('.reg-header')[i];
+  const body = document.getElementById('reg-body-'+i);
+  hdr.classList.toggle('open');
+  body.classList.toggle('open');
 }
 
 // ══════════════════════════════════════════════════════════════

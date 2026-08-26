@@ -463,11 +463,48 @@ def calc_by_city(data, min_orders=20):
     return rows[:300]
 
 def calc_by_region(data):
+    MAIN_TKS = ['5Post','СДЭК','Почта России','Курьер (свой)','Курьер (стационар)']
     rows = []
+    total_all = len(data)
+
     for region, g in data.groupby('Регион'):
-        r = _block(g); r['region'] = region
-        r['share_pct'] = round(len(g)/len(data)*100,1)
+        r = _block(g)
+        r['region']    = region
+        r['share_pct'] = round(len(g)/total_all*100, 1)
+
+        # Разбивка по ТК внутри региона
+        tk_data = {}
+        for tk, tg in g.groupby('ТК'):
+            if tk not in MAIN_TKS: continue
+            total = len(tg)
+            if total < 5: continue
+            delivered = (tg['Статус_группа']=='Доставлен').sum()
+            returned  = (tg['Статус_группа']=='Возврат').sum()
+            days = safe_mean(tg[tg['Статус_группа']=='Доставлен']['срок_полный_дн'])
+            fin  = _finrez(tg)
+            tk_data[tk] = {
+                'total':         int(total),
+                'delivered':     int(delivered),
+                'returned':      int(returned),
+                'delivery_rate': round(delivered/total*100, 1) if total else None,
+                'return_rate':   round(returned/total*100, 1)  if total else None,
+                'days':          days,
+                **fin,
+            }
+        r['tk_breakdown'] = tk_data
+
+        # Топ городов региона
+        city_rows = []
+        for city, cg in g.groupby('Населенный пункт'):
+            if len(cg) < 5: continue
+            cb = _block(cg)
+            cb['city'] = city
+            city_rows.append(cb)
+        city_rows.sort(key=lambda x: x['total'], reverse=True)
+        r['cities'] = city_rows[:30]
+
         rows.append(r)
+
     return sorted(rows, key=lambda x: x['total'], reverse=True)
 
 def calc_trend(data):
