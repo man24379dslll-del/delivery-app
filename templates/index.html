@@ -1249,30 +1249,25 @@ function renderRegions(rows){
         </div>`).join('');
 
     // Города
-    const citiesHtml = (r.cities||[]).length ? `
-      <div class="reg-cities-section">
-        <h4>🏙 Города (${r.cities.length})</h4>
-        <div class="tbl-wrap">
-          <table>
-            <thead><tr>
-              <th>Город</th><th>Заказов</th><th>% выкупа</th>
-              <th>% возврата</th><th>Срок, дн.</th><th>Финрез, ₽</th>
-            </tr></thead>
-            <tbody>
-              ${r.cities.map(c=>{
-                const dk = c.city+'_'+r.region;
-                return '<tr class="clickable" onclick="openCityByKey(this.dataset.key)" data-key="'+dk+'">'
-                  +'<td><strong>'+c.city+'</strong></td>'
-                  +'<td class="mono">'+fmt(c.total)+'</td>'
-                  +'<td>'+rbar(c.delivery_rate)+'</td>'
-                  +'<td>'+badgeR(c.return_rate)+'</td>'
-                  +'<td class="mono">'+fmtD(c.срок_полный_ср)+'</td>'
-                  +'<td>'+finCell(c.finrez)+'</td>'
-                  +'</tr>';
-              }).join('')</tbody>
-          </table>
-        </div>
-      </div>` : '';
+    let citiesHtml = '';
+    if((r.cities||[]).length){
+      const cityRows = r.cities.map(c=>{
+        const dk = c.city+'_'+r.region;
+        return '<tr class="clickable" onclick="openCityByKey(this.dataset.key)" data-key="'+dk+'">'
+          +'<td><strong>'+c.city+'</strong></td>'
+          +'<td class="mono">'+fmt(c.total)+'</td>'
+          +'<td>'+rbar(c.delivery_rate)+'</td>'
+          +'<td>'+badgeR(c.return_rate)+'</td>'
+          +'<td class="mono">'+fmtD(c.срок_полный_ср)+'</td>'
+          +'<td>'+finCell(c.finrez)+'</td>'
+          +'</tr>';
+      }).join('');
+      citiesHtml = '<div class="reg-cities-section"><h4>🏙 Города ('+r.cities.length+')</h4>'
+        +'<div class="tbl-wrap"><table>'
+        +'<thead><tr><th>Город</th><th>Заказов</th><th>% выкупа</th>'
+        +'<th>% возврата</th><th>Срок, дн.</th><th>Финрез, ₽</th></tr></thead>'
+        +'<tbody>'+cityRows+'</tbody></table></div></div>';
+    }
 
     return `<div class="reg-item">
       <div class="reg-header" onclick="toggleRegion(${i})">
