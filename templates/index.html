@@ -1289,13 +1289,14 @@ function renderRegions(rows){
 
   rows.forEach((r,ri)=>{
     if(q && !r.region.toLowerCase().includes(q)) return;
+    const rKey = 'r'+ri;
 
     // Строка региона
     const rPct = r.delivery_rate||0;
     const rColor = rPct>=50?'#10B981':'#F43F5E';
-    body += `<tr style="cursor:pointer;background:#1E293B" onclick="toggleRegRow(${ri})">`;
+    body += `<tr style="cursor:pointer;background:#1E293B" onclick="toggleRegRow('${rKey}')">`;
     body += `<td style="padding:10px 14px;font-weight:700;color:#F8FAFC;position:sticky;left:0;background:#1E293B;z-index:1">
-      <span id="reg-arrow-${ri}" style="margin-right:8px;font-size:10px;transition:transform .2s;display:inline-block">▶</span>${r.region}
+      <span id="reg-arrow-${rKey}" style="margin-right:8px;font-size:10px;transition:transform .2s;display:inline-block">▶</span>${r.region}
     </td>`;
     body += `<td style="padding:8px;text-align:center;color:#94A3B8;font-size:11px">—</td>`;
     body += `<td style="padding:8px;text-align:center;font-family:monospace;color:#E2E8F0">${fmt(r.total)}</td>`;
@@ -1314,7 +1315,7 @@ function renderRegions(rows){
     body += '</tr>';
 
     // Строки городов (скрыты по умолчанию)
-    body += `<tr id="reg-cities-${ri}" style="display:none"><td colspan="${4+tks.length*3}" style="padding:0">`;
+    body += `<tr id="reg-cities-${rKey}" style="display:none"><td colspan="${4+tks.length*3}" style="padding:0">`;
     body += '<table style="width:100%;border-collapse:collapse">';
 
     // Группируем города по сегментам
@@ -1385,12 +1386,13 @@ function renderRegions(rows){
   });
 }
 
-function toggleRegRow(i){
-  const row  = document.getElementById('reg-cities-'+i);
-  const arrow= document.getElementById('reg-arrow-'+i);
+function toggleRegRow(key){
+  const row  = document.getElementById('reg-cities-'+key);
+  const arrow= document.getElementById('reg-arrow-'+key);
+  if(!row) return;
   const open = row.style.display === 'none';
   row.style.display   = open ? '' : 'none';
-  arrow.style.transform = open ? 'rotate(90deg)' : '';
+  if(arrow) arrow.style.transform = open ? 'rotate(90deg)' : '';
 }
 // ══════════════════════════════════════════════════════════════
 // SEGMENTS × CITIES
