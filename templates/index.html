@@ -558,7 +558,7 @@ tbody tr.clickable{cursor:pointer}
           <option>Курьер (свой)</option>
           <option>Курьер (стационар)</option>
         </select>
-        <button class="fi" style="cursor:pointer;font-weight:700;white-space:nowrap" onclick="downloadRegionsReport()">📥 Скачать отчёт</button>
+        <button class="fi" style="cursor:pointer;font-weight:700;white-space:nowrap" onclick="downloadRegionsReport(this)">📥 Скачать Excel</button>
       </div>
       <div style="overflow-x:auto">
         <table id="reg-main-tbl" style="border-collapse:collapse;width:100%;min-width:900px;font-size:12px">
@@ -1416,105 +1416,35 @@ function toggleSegRow(key){
 }
 
 // ══════════════════════════════════════════════════════════════
-// СКАЧИВАНИЕ ОТЧЁТА (регионы × города, светлая тема для печати)
+// СКАЧИВАНИЕ ОТЧЁТА (Excel, светлая тема, с рекомендациями по ТК)
 // ══════════════════════════════════════════════════════════════
-function downloadRegionsReport(){
-  const rows = window._regData||[];
-  if(!rows.length){ alert('Нет данных для отчёта'); return; }
-
-  const esc = s => String(s==null?'':s).replace(/[&<>]/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]));
-
-  let regionsHtml = '';
-  rows.forEach(r=>{
-    const cities = r.cities||[];
-    if(!cities.length) return;
-
-    let citiesHtml = '';
-    cities.forEach(c=>{
-      const reco = calcCityRecommendations(c);
-      const cPct = c.delivery_rate||0;
-
-      let recoHtml = '<p class="muted">Недостаточно данных по ТК для рекомендации</p>';
-      if(reco){
-        const {best1, best2} = reco;
-        const recoCard = (label, icon, x, extra) => `
-          <div class="r-card">
-            <div class="r-label">${icon} ${esc(label)}</div>
-            <div class="r-tk">${esc(x.tk)}</div>
-            <table class="r-tbl">
-              <tr><td>% выкупа</td><td class="${x.dr>=50?'pos':'neg'}">${x.dr||'—'}%</td></tr>
-              ${extra}
-              <tr><td>Финрез (ср.чек − тариф)</td><td class="${(x.finrez||0)>0?'pos':'neg'}">${x.finrez!=null?fmt(x.finrez)+'₽':'—'}</td></tr>
-            </table>
-          </div>`;
-        const extra1 = `<tr><td>Срок, дн.</td><td>${fmtD(best1.days)}</td></tr>`;
-        const extra2 = `<tr><td>Тариф (туда+возврат)</td><td>${best2.tarifFull!=null?fmt(Math.round(best2.tarifFull))+'₽':'—'}</td></tr>`;
-        recoHtml = `<div class="r-grid">
-          ${recoCard('Быстрее и надёжнее','⚡',best1,extra1)}
-          ${recoCard('Выгоднее по деньгам','💰',best2,extra2)}
-        </div>`;
-      }
-
-      citiesHtml += `
-        <div class="city-block">
-          <div class="city-hdr">
-            <span class="city-name">${esc(c.city)}</span>
-            <span class="city-meta">${esc(c.segment||'')} · ${fmt(c.total)} заказов · <span class="${cPct>=50?'pos':'neg'}">${cPct}% выкупа</span></span>
-          </div>
-          ${recoHtml}
-        </div>`;
-    });
-
-    regionsHtml += `
-      <div class="region-block">
-        <h2>${esc(r.region)} <span class="muted" style="font-size:13px;font-weight:400">· ${fmt(r.total)} заказов · ${r.delivery_rate||0}% выкупа</span></h2>
-        ${citiesHtml}
-      </div>`;
-  });
-
-  const now = new Date();
-  const dateStr = now.toLocaleDateString('ru');
-
-  const html = `<!DOCTYPE html>
-<html lang="ru"><head><meta charset="UTF-8">
-<title>Отчёт по доставке — ${dateStr}</title>
-<style>
-  body{font-family:-apple-system,Segoe UI,Arial,sans-serif;background:#ffffff;color:#1F2937;margin:0;padding:32px;line-height:1.4}
-  h1{font-size:22px;margin:0 0 4px}
-  .subtitle{color:#6B7280;font-size:13px;margin-bottom:28px}
-  .region-block{margin-bottom:36px;page-break-inside:avoid}
-  .region-block h2{font-size:16px;border-bottom:2px solid #E5E7EB;padding-bottom:8px;margin-bottom:14px}
-  .city-block{background:#F9FAFB;border:1px solid #E5E7EB;border-radius:10px;padding:14px 16px;margin-bottom:12px}
-  .city-hdr{display:flex;justify-content:space-between;align-items:baseline;margin-bottom:10px;flex-wrap:wrap;gap:6px}
-  .city-name{font-weight:700;font-size:14px}
-  .city-meta{font-size:12px;color:#6B7280}
-  .r-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px}
-  .r-card{background:#ffffff;border:1.5px solid #E5E7EB;border-radius:8px;padding:10px 12px}
-  .r-label{font-size:9.5px;font-weight:700;text-transform:uppercase;letter-spacing:.04em;color:#9CA3AF;margin-bottom:4px}
-  .r-tk{font-size:14px;font-weight:800;margin-bottom:6px}
-  .r-tbl{width:100%;border-collapse:collapse;font-size:11.5px}
-  .r-tbl td{padding:2px 0}
-  .r-tbl td:last-child{text-align:right;font-weight:700;font-family:monospace}
-  .pos{color:#059669}
-  .neg{color:#DC2626}
-  .muted{color:#9CA3AF}
-  @media print{ .city-block{page-break-inside:avoid} }
-</style></head>
-<body>
-  <h1>Отчёт по доставке — регионы и рекомендации ТК</h1>
-  <div class="subtitle">Сформировано ${dateStr}. Для каждого города показаны два рекомендуемых варианта ТК: быстрее/надёжнее и выгоднее по деньгам.</div>
-  ${regionsHtml}
-</body></html>`;
-
-  const blob = new Blob([html], {type:'text/html;charset=utf-8'});
-  const url  = URL.createObjectURL(blob);
-  const a    = document.createElement('a');
-  a.href = url;
-  a.download = 'otchet_dostavka_'+now.toISOString().slice(0,10)+'.html';
-  document.body.appendChild(a);
-  a.click();
-  document.body.removeChild(a);
-  URL.revokeObjectURL(url);
+async function downloadRegionsReport(btn){
+  const label = btn ? btn.textContent : null;
+  if(btn){ btn.textContent = '⏳ Формируем файл...'; btn.disabled = true; }
+  try{
+    const month = (typeof CURRENT_MONTH!=='undefined' && CURRENT_MONTH && CURRENT_MONTH!=='all') ? CURRENT_MONTH : '';
+    const resp = await fetch('/api/export/regions-xlsx'+(month?('?month='+encodeURIComponent(month)):''));
+    if(!resp.ok){
+      const err = await resp.json().catch(()=>({}));
+      alert('Не удалось сформировать отчёт: '+(err.detail||resp.statusText));
+      return;
+    }
+    const blob = await resp.blob();
+    const url  = URL.createObjectURL(blob);
+    const a    = document.createElement('a');
+    const cd   = resp.headers.get('Content-Disposition')||'';
+    const m    = cd.match(/filename="?([^"]+)"?/);
+    a.href = url;
+    a.download = m ? m[1] : ('otchet_regiony_tk_'+new Date().toISOString().slice(0,10)+'.xlsx');
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  } catch(e){
+    alert('Ошибка при скачивании отчёта: '+e.message);
+  } finally {
+    if(btn){ btn.textContent = label; btn.disabled = false; }
+  }
 }
 
 // ══════════════════════════════════════════════════════════════

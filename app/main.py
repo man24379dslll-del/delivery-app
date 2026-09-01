@@ -8,8 +8,9 @@ from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.analytics import load_and_parse, run_full_analytics
+from app.analytics import load_and_parse, run_full_analytics, calc_by_region, filter_by_month
 from app.database import save_upload, get_uploads, get_analytics_by_upload
+from app.export_xlsx import build_regions_xlsx
 
 app = FastAPI(title="Аналитика доставки ТК", version="1.0")
 
@@ -131,6 +132,28 @@ async def get_upload(upload_id: str):
 @app.get("/api/health")
 async def health():
     return {"status": "ok", "time": datetime.now().isoformat()}
+
+
+@app.get("/api/export/regions-xlsx")
+async def export_regions_xlsx(month: str = Query(default="")):
+    """Скачивание Excel-отчёта 'Регионы × ТК' со светлой темой и рекомендациями по ТК."""
+    global _cached_data
+    if _cached_data is None:
+        raise HTTPException(400, "Сначала загрузите файл")
+    try:
+        data = filter_by_month(_cached_data, month) if month and month != "all" else _cached_data
+        rows = calc_by_region(data)
+        buf = build_regions_xlsx(rows)
+    except Exception as e:
+        raise HTTPException(500, f"Ошибка формирования отчёта: {e}")
+
+    from fastapi.responses import StreamingResponse
+    filename = f"otchet_regiony_tk_{datetime.now().strftime('%Y-%m-%d')}.xlsx"
+    return StreamingResponse(
+        buf,
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
 
 
 # ── Google Sheets интеграция ────────────────────────────────────────
