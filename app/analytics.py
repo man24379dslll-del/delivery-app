@@ -509,6 +509,7 @@ def calc_by_region(data):
                 returned   = (tg['Статус_группа']=='Возврат').sum()
                 days       = safe_mean(tg[tg['Статус_группа']=='Доставлен']['срок_полный_дн'])
                 avg_tarif  = tg['тариф_факт'].replace(0,np.nan).mean()
+                fin        = _finrez(tg)
                 tk_bd[tk]  = {
                     'total':         int(total_tk),
                     'delivered':     int(delivered),
@@ -516,6 +517,8 @@ def calc_by_region(data):
                     'return_rate':   round(returned/total_tk*100,1)  if total_tk else None,
                     'days':          days,
                     'avg_tarif':     round(float(avg_tarif),0) if pd.notna(avg_tarif) else None,
+                    'avg_cost':      round(float(avg_tarif),1) if pd.notna(avg_tarif) else None,
+                    **fin,
                 }
             cb['tk_breakdown'] = tk_bd
             city_rows.append(cb)
