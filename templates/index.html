@@ -276,6 +276,10 @@ tbody tr.clickable{cursor:pointer}
 .tk-row:last-child{border:none}
 .tk-row .tv{font-family:var(--mono);font-weight:700}
 .tv.pos{color:var(--green)}.tv.neg{color:var(--red)}
+.reco-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:12px;margin-bottom:22px}
+.reco-card{border:2px solid var(--border);border-radius:12px;padding:16px;background:var(--bg)}
+.reco-card .reco-label{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--soft);margin-bottom:6px}
+.reco-card .reco-tk{font-size:16px;font-weight:800;margin-bottom:10px}
 
 /* ── FILTERS ROW ────────────────────────────────────────────── */
 .filters{display:flex;gap:10px;flex-wrap:wrap;margin-bottom:14px;align-items:center}
@@ -840,6 +844,7 @@ tbody tr.clickable{cursor:pointer}
     <h2 id="cm-city">—</h2>
     <div class="modal-sub" id="cm-meta">—</div>
     <div class="modal-kpi" id="cm-kpi"></div>
+    <div id="cm-reco-wrap"></div>
     <div style="font-size:13px;font-weight:700;margin-bottom:12px">Сравнение транспортных компаний</div>
     <div class="tk-compare" id="cm-tks"></div>
   </div>
@@ -1828,6 +1833,65 @@ function openCityByKey(key){
   const d=window._cityDataMap&&window._cityDataMap[key];
   if(d) openCityCard(d);
 }
+
+// Рекомендация лучшего ТК для города: 2 варианта.
+// 1) % выкупа + срок доставки — кто быстрее и надёжнее везёт.
+// 2) % выкупа + тариф (отправка+возврат) — кто выгоднее по деньгам.
+// Финрез считается по формуле: ср.чек города − тариф на доставку (с учётом возврата).
+function buildCityRecommendations(r){
+  const tkd = r.tk_breakdown||{};
+  const avgCheck = r.avg_check||0;
+
+  const candidates = Object.entries(tkd).map(([tk,t])=>{
+    const dr   = t.delivery_rate||0;
+    const days = t.days;
+    const rr   = t.return_rate||0;
+    // Тариф за один заказ с учётом того, что часть заказов едет туда-обратно (возврат)
+    const tarifBase = (t.avg_tarif!=null?t.avg_tarif:t.avg_cost);
+    const tarifFull = (tarifBase!=null) ? tarifBase*(1+rr/100) : null;
+    const finrez = (tarifFull!=null) ? Math.round(avgCheck - tarifFull) : null;
+    return {tk, dr, days, rr, tarifBase, tarifFull, finrez, total:t.total};
+  }).filter(c=>c.total>=3);
+
+  if(candidates.length < 1) return '';
+
+  // Вариант 1: скорость + надёжность (переиспользуем ту же формулу скоринга, что и на других страницах)
+  const withDays = candidates.filter(c=>c.days!=null);
+  const pool1 = withDays.length ? withDays : candidates;
+  const best1 = pool1.reduce((a,b)=> calcScore(b.dr,b.days!=null?b.days:20) > calcScore(a.dr,a.days!=null?a.days:20) ? b : a);
+
+  // Вариант 2: % выкупа + тариф (отправка+возврат) — дешевле и с хорошим выкупом
+  const withTarif = candidates.filter(c=>c.tarifFull!=null);
+  const pool2 = withTarif.length ? withTarif : candidates;
+  const minT = Math.min(...pool2.map(c=>c.tarifFull!=null?c.tarifFull:0));
+  const maxT = Math.max(...pool2.map(c=>c.tarifFull!=null?c.tarifFull:0));
+  const costScore = c => {
+    if(c.tarifFull==null) return c.dr*0.6;
+    const cs = maxT>minT ? (1-(c.tarifFull-minT)/(maxT-minT))*100 : 100;
+    return c.dr*0.6 + cs*0.4;
+  };
+  const best2 = pool2.reduce((a,b)=> costScore(b) > costScore(a) ? b : a);
+
+  const card = (label, icon, c, extraRow) => `
+    <div class="reco-card">
+      <div class="reco-label">${icon} ${label}</div>
+      <div class="reco-tk">${c.tk}</div>
+      <div class="tk-row"><span>% выкупа</span><span class="tv ${c.dr>=50?'pos':'neg'}">${c.dr||'—'}%</span></div>
+      ${extraRow}
+      <div class="tk-row"><span>Финрез (ср.чек − тариф)</span><span class="tv ${(c.finrez||0)>0?'pos':'neg'}">${c.finrez!=null?fmt(c.finrez)+'₽':'—'}</span></div>
+    </div>`;
+
+  const row1 = `<div class="tk-row"><span>Срок, дн.</span><span class="tv">${fmtD(best1.days)}</span></div>`;
+  const row2 = `<div class="tk-row"><span>Тариф (туда+возврат)</span><span class="tv">${best2.tarifFull!=null?fmt(Math.round(best2.tarifFull))+'₽':'—'}</span></div>`;
+
+  return `
+    <div style="font-size:13px;font-weight:700;margin-bottom:12px">🏆 Рекомендация лучшего ТК</div>
+    <div class="reco-grid">
+      ${card('Быстрее и надёжнее', '⚡', best1, row1)}
+      ${card('Выгоднее по деньгам', '💰', best2, row2)}
+    </div>`;
+}
+
 function openCityCard(r){
   if(!r||!r.city) return;
   document.getElementById('cm-city').textContent=r.city;
@@ -1846,6 +1910,8 @@ function openCityCard(r){
   document.getElementById('cm-kpi').innerHTML=kpis.map(k=>
     `<div class="mki"><div class="ml">${k.l}</div><div class="mv ${k.cls}">${k.v}</div></div>`
   ).join('');
+
+  document.getElementById('cm-reco-wrap').innerHTML = buildCityRecommendations(r);
 
   const tkd=r.tk_breakdown||{};
   const tks=Object.keys(tkd);
